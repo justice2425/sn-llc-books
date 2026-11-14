@@ -1,0 +1,10 @@
+{
+  "identifier": "com.YOUR-USERNAME.llc-books",
+  "name": "LLC Books",
+  "content_type": "SN|Component",
+  "area": "editor-editor",
+  "version": "1.0.0",
+  "description": "Cash-basis ledger for a single-member LLC: income, expenses by Schedule C line, owner draws, mileage, and year-end reports. Data is stored in the note.",
+  "url": "https://YOUR-USERNAME.github.io/sn-llc-books/index.html",
+  "latest_url": "https://YOUR-USERNAME.github.io/sn-llc-books/ext.json"
+}

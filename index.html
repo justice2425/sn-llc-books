@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLC Books</title>
+<!--
+  LLC Books: a cash-basis ledger for a single-member LLC, built as a Standard Notes editor plugin.
+  All data is stored as JSON in the text of the note that is open. This page makes no network requests.
+  Communication with Standard Notes uses the official component relay (component-relay.js, AGPL-3.0).
+-->
+<style>
+:root{
+  --bg:var(--sn-stylekit-background-color,#ffffff);
+  --fg:var(--sn-stylekit-foreground-color,#1b1d21);
+  --panel:var(--sn-stylekit-contrast-background-color,#f4f5f7);
+  --line:var(--sn-stylekit-border-color,#dcdfe4);
+  --muted:var(--sn-stylekit-neutral-color,#69707d);
+  --accent:var(--sn-stylekit-info-color,#0b66c3);
+  --accent-fg:var(--sn-stylekit-info-contrast-color,#ffffff);
+  --good:var(--sn-stylekit-success-color,#1a7f4b);
+  --bad:var(--sn-stylekit-danger-color,#c2332b);
+  --warn:var(--sn-stylekit-warning-color,#a86400);
+  --font:var(--sn-stylekit-sans-serif-font,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif);
+  --mono:var(--sn-stylekit-monospace-font,ui-monospace,"SF Mono",Menlo,Consolas,monospace);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:var(--sn-stylekit-background-color,#17181b);
+    --fg:var(--sn-stylekit-foreground-color,#e8eaed);
+    --panel:var(--sn-stylekit-contrast-background-color,#222429);
+    --line:var(--sn-stylekit-border-color,#353840);
+    --muted:var(--sn-stylekit-neutral-color,#9aa1ad);
+    --accent:var(--sn-stylekit-info-color,#5aa7f2);
+    --accent-fg:var(--sn-stylekit-info-contrast-color,#0d1117);
+    --good:var(--sn-stylekit-success-color,#57c08a);
+    --bad:var(--sn-stylekit-danger-color,#f07b72);
+    --warn:var(--sn-stylekit-warning-color,#e0a84a);
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--fg);font:14px/1.45 var(--font);-webkit-text-size-adjust:100%}
+.wrap{max-width:1080px;margin:0 auto;padding:14px 16px 48px}
+header.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+h1{font-size:17px;margin:0;font-weight:650;letter-spacing:-.01em}
+h1 small{font-weight:400;color:var(--muted);font-size:12px;margin-left:6px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:22px 0 8px;font-weight:600}
+.spacer{flex:1}
+.status{font-size:12px;color:var(--muted)}
+.status.err{color:var(--bad)}
+nav.tabs{display:flex;gap:2px;margin:10px 0 14px;border-bottom:1px solid var(--line);overflow-x:auto}
+nav.tabs button{appearance:none;background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);font:inherit;font-weight:550;padding:8px 12px;cursor:pointer;white-space:nowrap}
+nav.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+button,input,select,textarea{font:inherit;color:inherit}
+input,select,textarea{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%;min-width:0}
+textarea{font-family:var(--mono);font-size:12px;min-height:120px}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:3px}
+.btn{appearance:none;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:550;white-space:nowrap}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn.small{padding:2px 8px;font-size:12px;font-weight:500}
+.btn.danger{color:var(--bad)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+form.entry{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:grid;gap:10px;grid-template-columns:repeat(12,1fr)}
+form.entry .f{grid-column:span 3}
+form.entry .f.w2{grid-column:span 2}
+form.entry .f.w4{grid-column:span 4}
+form.entry .f.w6{grid-column:span 6}
+form.entry .actions{grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hint{font-size:12px;color:var(--muted)}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:14px 0 8px}
+.filters > div{flex:1 1 140px}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;background:var(--panel);white-space:nowrap}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.nowrap{white-space:nowrap}
+tfoot td{font-weight:650;background:var(--panel);border-top:1px solid var(--line)}
+.pos{color:var(--good)}.neg{color:var(--bad)}
+.tag{display:inline-block;font-size:11px;border:1px solid var(--line);border-radius:999px;padding:0 7px;color:var(--muted);white-space:nowrap}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--panel)}
+.tile .k{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.tile .v{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums;margin-top:2px}
+.tile .s{font-size:12px;color:var(--muted)}
+.meter{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin:6px 0 4px}
+.meter i{display:block;height:100%;background:var(--accent)}
+.meter.over i{background:var(--warn)}
+.notice{border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:6px;padding:10px 12px;background:var(--panel);margin:12px 0}
+.notice.info{border-left-color:var(--accent)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.empty{padding:22px;text-align:center;color:var(--muted)}
+[hidden]{display:none!important}
+@media (max-width:720px){
+  form.entry .f,form.entry .f.w2,form.entry .f.w4{grid-column:span 6}
+  form.entry .f.w6{grid-column:1/-1}
+}
+@media print{nav.tabs,form.entry,.filters,.btn,.noprint{display:none!important}body{background:#fff;color:#000}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1><span id="bizName">LLC Books</span><small id="modeLabel"></small></h1>
+    <span class="spacer"></span>
+    <div class="row">
+      <label for="year" style="margin:0">Tax year</label>
+      <select id="year" style="width:auto"></select>
+    </div>
+    <span class="status" id="status" role="status" aria-live="polite"></span>
+  </header>
+
+  <div id="foreign" class="notice" hidden>
+    <strong>This note already contains text that is not an LLC Books ledger.</strong>
+    <p class="hint" style="margin:6px 0">Starting a ledger here replaces the note's text with ledger data. The existing text is kept inside the ledger under Settings, and Standard Notes also keeps note history.</p>
+    <button class="btn" id="adopt" type="button">Start a ledger in this note</button>
+  </div>
+  <div id="locked" class="notice info" hidden>This note is locked in Standard Notes, so the ledger is read-only. Unlock the note to make changes.</div>
+
+  <div id="app" hidden>
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" data-tab="ledger" aria-selected="true">Ledger</button>
+    <button role="tab" data-tab="reports" aria-selected="false">Reports</button>
+    <button role="tab" data-tab="mileage" aria-selected="false">Mileage</button>
+    <button role="tab" data-tab="settings" aria-selected="false">Settings and backup</button>
+  </nav>
+
+  <!-- LEDGER -->
+  <section id="tab-ledger" role="tabpanel">
+    <form class="entry" id="txForm" autocomplete="off">
+      <input type="hidden" id="txId">
+      <div class="f w2"><label for="txDate">Date</label><input type="date" id="txDate" required></div>
+      <div class="f w2"><label for="txType">Type</label>
+        <select id="txType">
+          <option value="income">Income</option>
+          <option value="expense">Expense</option>
+          <option value="equity">Owner / non-deductible</option>
+        </select></div>
+      <div class="f w4"><label for="txCat">Category</label><select id="txCat"></select></div>
+      <div class="f w2"><label for="txAmt">Amount ($)</label><input id="txAmt" inputmode="decimal" placeholder="0.00" required></div>
+      <div class="f w2"><label for="txAcct">Paid via</label><input id="txAcct" list="acctList" placeholder="Checking"><datalist id="acctList"></datalist></div>
+      <div class="f w4"><label for="txParty" id="txPartyLabel">Client / payer</label><input id="txParty" list="partyList"><datalist id="partyList"></datalist></div>
+      <div class="f w6"><label for="txMemo">Description (business purpose)</label><input id="txMemo"></div>
+      <div class="f w2"><label for="txRef">Receipt / invoice ref</label><input id="txRef"></div>
+      <div class="actions">
+        <button class="btn primary" type="submit" id="txSave">Add entry</button>
+        <button class="btn" type="button" id="txCancel" hidden>Cancel edit</button>
+        <span class="hint" id="catHint"></span>
+        <span class="hint neg" id="txErr" role="alert"></span>
+      </div>
+    </form>
+
+    <div class="filters noprint">
+      <div><label for="fSearch">Search</label><input id="fSearch" type="search" placeholder="Payee, description, ref"></div>
+      <div><label for="fType">Type</label><select id="fType"><option value="">All types</option><option value="income">Income</option><option value="expense">Expense</option><option value="equity">Owner / non-deductible</option></select></div>
+      <div><label for="fCat">Category</label><select id="fCat"></select></div>
+    </div>
+    <div class="tablewrap">
+      <table id="txTable">
+        <thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Payee / payer</th><th>Description</th><th>Ref</th><th class="num">Amount</th><th class="noprint"></th></tr></thead>
+        <tbody></tbody>
+        <tfoot></tfoot>
+      </table>
+    </div>
+  </section>
+
+  <!-- REPORTS -->
+  <section id="tab-reports" role="tabpanel" hidden>
+    <div class="tiles" id="tiles"></div>
+    <div class="notice info" id="feeBox"></div>
+    <h2>Profit and loss by Schedule C line</h2>
+    <div class="tablewrap"><table id="plTable"><thead><tr><th>Line</th><th>Category</th><th class="num">Entries</th><th class="num">Amount</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>
+    <p class="hint">Line numbers follow recent versions of IRS Schedule C (Form 1040). Check them against the form for the year you are filing. This report organizes your records; it does not compute tax.</p>
+    <h2>By calendar quarter</h2>
+    <div class="tablewrap"><table id="qTable"><thead><tr><th>Quarter</th><th class="num">Income</th><th class="num">Expenses</th><th class="num">Net</th><th class="num">Money out to owner</th><th class="num">Est. tax paid</th></tr></thead><tbody></tbody></table></div>
+    <div class="grid2">
+      <div><h2>Income by payer</h2><div class="tablewrap"><table id="payerTable"><thead><tr><th>Payer</th><th class="num">Received</th></tr></thead><tbody></tbody></table></div><p class="hint">Use this to reconcile Forms 1099 you receive.</p></div>
+      <div><h2>Contract labor by payee</h2><div class="tablewrap"><table id="contractorTable"><thead><tr><th>Payee</th><th class="num">Paid</th><th></th></tr></thead><tbody></tbody></table></div><p class="hint" id="contractorHint"></p></div>
+    </div>
+    <h2>Owner account</h2>
+    <div class="tablewrap"><table id="eqTable"><thead><tr><th>Item</th><th class="num">Amount</th></tr></thead><tbody></tbody></table></div>
+    <div class="row noprint" style="margin-top:14px"><button class="btn" type="button" id="printBtn">Print this report</button></div>
+  </section>
+
+  <!-- MILEAGE -->
+  <section id="tab-mileage" role="tabpanel" hidden>
+    <form class="entry" id="miForm" autocomplete="off">
+      <div class="f w2"><label for="miDate">Date</label><input type="date" id="miDate" required></div>
+      <div class="f w2"><label for="miMiles">Miles</label><input id="miMiles" inputmode="decimal" required></div>
+      <div class="f w4"><label for="miDest">From / to</label><input id="miDest"></div>
+      <div class="f w4"><label for="miPurpose">Business purpose</label><input id="miPurpose"></div>
+      <div class="actions"><button class="btn primary" type="submit">Add trip</button><span class="hint">Log each trip when it happens. Commuting from home to a regular office is generally not business mileage.</span><span class="hint neg" id="miErr" role="alert"></span></div>
+    </form>
+    <div class="tablewrap" style="margin-top:14px"><table id="miTable"><thead><tr><th>Date</th><th>From / to</th><th>Purpose</th><th class="num">Miles</th><th class="noprint"></th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>
+    <p class="hint" id="miHint"></p>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="tab-settings" role="tabpanel" hidden>
+    <h2>Business</h2>
+    <div class="grid2">
+      <div><label for="sName">Business name</label><input id="sName" placeholder="Example Consulting LLC"></div>
+      <div><label for="sReserve">Tax reserve target (% of net profit)</label><input id="sReserve" inputmode="decimal" placeholder="e.g. 30"></div>
+      <div><label for="sMile">Standard mileage rate ($ per mile, from the IRS for this year)</label><input id="sMile" inputmode="decimal" placeholder="leave blank if using actual costs"></div>
+      <div><label for="sMeals">Deductible share of business meals (%)</label><input id="sMeals" inputmode="decimal"></div>
+      <div><label for="sNec">Contractor reporting threshold ($)</label><input id="sNec" inputmode="decimal"></div>
+      <div><label for="sFee">California LLC fee threshold ($ gross receipts)</label><input id="sFee" inputmode="decimal"></div>
+    </div>
+    <p class="hint">The percentages and thresholds are yours to set. Confirm them with your CPA each year; this tool does not look anything up.</p>
+
+    <h2>Backup and export</h2>
+    <div class="row">
+      <button class="btn" type="button" id="expCsv">Export selected year as CSV</button>
+      <button class="btn" type="button" id="expJson">Export full backup (JSON)</button>
+      <button class="btn" type="button" id="showCsv">Show CSV to copy</button>
+      <button class="btn" type="button" id="showJson">Show backup to copy</button>
+    </div>
+    <textarea id="outBox" readonly hidden aria-label="Export output" style="margin-top:10px"></textarea>
+
+    <h2>Restore from backup</h2>
+    <p class="hint">Paste a JSON backup below, or choose a file. Restoring replaces everything in this ledger.</p>
+    <div class="row"><input type="file" id="impFile" accept="application/json,.json" style="width:auto"></div>
+    <textarea id="impBox" aria-label="Backup to restore" placeholder='{"llcBooks":1, ...}' style="margin-top:8px"></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn danger" type="button" id="impBtn">Replace ledger with this backup</button><span class="hint" id="impMsg" role="status"></span></div>
+
+    <div id="legacyWrap" hidden>
+      <h2>Text that was in this note before the ledger</h2>
+      <textarea id="legacyBox" readonly aria-label="Previous note text"></textarea>
+    </div>
+  </section>
+  </div>
+</div>
+
+<script src="component-relay.js"></script>
+<script>
+(function(){
+'use strict';
+
+/* ---------- Categories ---------- */
+var CATS = {
+  income: [
+    {id:'receipts', label:'Consulting fees / gross receipts', line:'1'},
+    {id:'returns', label:'Refunds and credits given to clients', line:'2', hint:'Reduces gross receipts.'},
+    {id:'otherinc', label:'Other business income', line:'6'}
+  ],
+  expense: [
+    {id:'adv', label:'Advertising and marketing', line:'8'},
+    {id:'car', label:'Car and truck (actual costs)', line:'9', hint:'Use either actual costs here or the Mileage tab with a standard rate, not both.'},
+    {id:'comm', label:'Commissions and fees', line:'10'},
+    {id:'contract', label:'Contract labor', line:'11', hint:'Collect a W-9 before paying. Payee totals appear in Reports.'},
+    {id:'depr', label:'Equipment (depreciation / Section 179)', line:'13', hint:'Record the purchase; your CPA decides how it is deducted.'},
+    {id:'ins', label:'Insurance, business', line:'15', hint:'Not health insurance; record that under Owner / non-deductible.'},
+    {id:'int', label:'Interest, business', line:'16b'},
+    {id:'legal', label:'Legal and professional services', line:'17'},
+    {id:'office', label:'Office expense', line:'18'},
+    {id:'rent', label:'Rent or lease', line:'20b'},
+    {id:'repairs', label:'Repairs and maintenance', line:'21'},
+    {id:'supplies', label:'Supplies', line:'22'},
+    {id:'taxlic', label:'Taxes and licenses', line:'23', hint:'Includes the California $800 annual LLC tax and city business license. Not income tax estimates.'},
+    {id:'travel', label:'Travel', line:'24a'},
+    {id:'meals', label:'Business meals', line:'24b', hint:'Enter the full amount; the report applies the deductible share from Settings.'},
+    {id:'util', label:'Utilities, phone and internet (business share)', line:'25'},
+    {id:'software', label:'Software and subscriptions', line:'27a'},
+    {id:'edu', label:'Education and training', line:'27a'},
+    {id:'bank', label:'Bank and payment processing fees', line:'27a'},
+    {id:'dues', label:'Dues and memberships', line:'27a'},
+    {id:'othexp', label:'Other business expense', line:'27a'},
+    {id:'home', label:'Home office (direct costs)', line:'30', hint:'Your CPA computes the home office deduction; record direct costs here.'}
+  ],
+  equity: [
+    {id:'contrib', label:'Owner contribution (money in)', sign:1, hint:'Money you put into the LLC. Not income.'},
+    {id:'draw', label:'Owner draw (money out)', sign:-1, hint:'Money you take out. Not an expense.'},
+    {id:'estfed', label:'Federal estimated tax payment', sign:-1, hint:'A personal tax payment. Counts as a draw if paid from the business account.'},
+    {id:'estca', label:'California estimated tax payment', sign:-1, hint:'A personal tax payment. Counts as a draw if paid from the business account.'},
+    {id:'health', label:'Health insurance premium (self-employed)', sign:-1, hint:'Deducted on your personal return, not Schedule C.'},
+    {id:'retire', label:'Retirement plan contribution', sign:-1, hint:'Deducted on your personal return, not Schedule C.'}
+  ]
+};
+var CAT_INDEX = {};
+Object.keys(CATS).forEach(function(t){ CATS[t].forEach(function(c){ c.type=t; CAT_INDEX[c.id]=c; }); });
+var TYPE_LABEL = {income:'Income', expense:'Expense', equity:'Owner'};
+
+/* ---------- State ---------- */
+function blank(){
+  return {llcBooks:1, settings:{name:'', reservePct:'', mileRate:'', mealsPct:50, necThreshold:2000, feeThreshold:250000}, transactions:[], mileage:[]};
+}
+var data = blank();
+var note = null, relay = null, locked = false, lastText = null, standalone = false, foreignText = null;
+var year = new Date().getFullYear();
+var $ = function(id){ return document.getElementById(id); };
+
+/* ---------- Helpers ---------- */
+function uid(){ try{ if(window.crypto&&crypto.randomUUID) return crypto.randomUUID(); }catch(e){} return 'x'+Date.now().toString(36)+Math.random().toString(36).slice(2,10); }
+function toCents(s){
+  if(typeof s==='number') return Math.round(s*100);
+  s=String(s||'').replace(/[$,\s]/g,'');
+  if(!/^\d*(\.\d{0,2})?$/.test(s)||s===''||s==='.') return NaN;
+  var p=s.split('.'); var whole=parseInt(p[0]||'0',10); var frac=((p[1]||'')+'00').slice(0,2);
+  return whole*100+parseInt(frac,10);
+}
+function money(c){
+  var neg=c<0; c=Math.abs(Math.round(c));
+  var s=Math.floor(c/100).toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')+'.'+('0'+(c%100)).slice(-2);
+  return (neg?'-$':'$')+s;
+}
+function num(v){ var n=parseFloat(String(v).replace(/[$,%\s]/g,'')); return isFinite(n)?n:NaN; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];}); }
+function today(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function yearOf(d){ return parseInt(String(d).slice(0,4),10); }
+function quarterOf(d){ return Math.floor((parseInt(String(d).slice(5,7),10)-1)/3); }
+function setStatus(msg,err){ var s=$('status'); s.textContent=msg||''; s.className='status'+(err?' err':''); }
+
+function normalize(obj){
+  var d=blank();
+  if(obj&&typeof obj==='object'){
+    if(obj.settings&&typeof obj.settings==='object'){ for(var k in d.settings){ if(obj.settings[k]!==undefined) d.settings[k]=obj.settings[k]; } }
+    if(Array.isArray(obj.transactions)) d.transactions=obj.transactions.filter(function(t){ return t&&t.date&&CAT_INDEX[t.cat]&&isFinite(t.cents); })
+      .map(function(t){ return {id:t.id||uid(), date:String(t.date).slice(0,10), cat:t.cat, cents:Math.abs(Math.round(t.cents)), party:t.party||'', memo:t.memo||'', ref:t.ref||'', acct:t.acct||''}; });
+    if(Array.isArray(obj.mileage)) d.mileage=obj.mileage.filter(function(m){ return m&&m.date&&isFinite(m.miles); })
+      .map(function(m){ return {id:m.id||uid(), date:String(m.date).slice(0,10), miles:+m.miles, dest:m.dest||'', purpose:m.purpose||''}; });
+    if(typeof obj.legacyText==='string') d.legacyText=obj.legacyText;
+  }
+  return d;
+}
+function serialize(){ return JSON.stringify(data,null,1); }
+
+/* ---------- Calculations ---------- */
+function summarize(y){
+  var r={y:y, cats:{}, count:{}, gross:0, returns:0, otherInc:0, expenses:0, mealsFull:0, q:[0,1,2,3].map(function(){return {inc:0,exp:0,draw:0,est:0};}), payers:{}, contractors:{}, eq:{}, miles:0};
+  data.transactions.forEach(function(t){
+    if(yearOf(t.date)!==y) return;
+    var c=CAT_INDEX[t.cat], q=r.q[quarterOf(t.date)];
+    r.cats[t.cat]=(r.cats[t.cat]||0)+t.cents; r.count[t.cat]=(r.count[t.cat]||0)+1;
+    if(c.type==='income'){
+      if(t.cat==='returns'){ r.returns+=t.cents; q.inc-=t.cents; }
+      else { if(t.cat==='receipts') r.gross+=t.cents; else r.otherInc+=t.cents; q.inc+=t.cents; var p=(t.party||'(no payer entered)'); r.payers[p]=(r.payers[p]||0)+t.cents; }
+    } else if(c.type==='expense'){
+      r.expenses+=t.cents; q.exp+=t.cents; if(t.cat==='meals') r.mealsFull+=t.cents;
+      if(t.cat==='contract'){ var n=(t.party||'(no payee entered)'); r.contractors[n]=(r.contractors[n]||0)+t.cents; }
+    } else {
+      r.eq[t.cat]=(r.eq[t.cat]||0)+t.cents;
+      if(t.cat==='estfed'||t.cat==='estca') q.est+=t.cents;
+      if(c.sign<0) q.draw+=t.cents;
+    }
+  });
+  data.mileage.forEach(function(m){ if(yearOf(m.date)===y) r.miles+=m.miles; });
+  var mealsPct=num(data.settings.mealsPct); if(isNaN(mealsPct)) mealsPct=50;
+  r.mealsDisallowed=Math.round(r.mealsFull*(100-Math.min(100,Math.max(0,mealsPct)))/100);
+  var rate=num(data.settings.mileRate);
+  r.mileRate=isNaN(rate)?0:rate;
+  r.mileDeduction=Math.round(r.miles*r.mileRate*100);
+  r.totalIncome=r.gross-r.returns+r.otherInc;
+  r.deductible=r.expenses-r.mealsDisallowed+r.mileDeduction;
+  r.net=r.totalIncome-r.deductible;
+  return r;
+}
+
+/* ---------- Rendering ---------- */
+function years(){
+  var set={}; set[new Date().getFullYear()]=1; set[year]=1;
+  data.transactions.concat(data.mileage).forEach(function(t){ var y=yearOf(t.date); if(y>1990&&y<2200) set[y]=1; });
+  return Object.keys(set).map(Number).sort(function(a,b){return b-a;});
+}
+function fillCats(sel,type,withAll){
+  var html=withAll?'<option value="">All categories</option>':'';
+  (type?[type]:['income','expense','equity']).forEach(function(t){
+    if(!type) html+='<optgroup label="'+TYPE_LABEL[t]+'">';
+    CATS[t].forEach(function(c){ html+='<option value="'+c.id+'">'+esc(c.label)+(c.line?' (line '+c.line+')':'')+'</option>'; });
+    if(!type) html+='</optgroup>';
+  });
+  var prev=sel.value; sel.innerHTML=html; if(prev&&sel.querySelector('option[value="'+prev+'"]')) sel.value=prev;
+}
+function updateEntryLabels(){
+  var t=$('txType').value;
+  $('txPartyLabel').textContent=t==='income'?'Client / payer':(t==='expense'?'Vendor / payee':'Paid to / from');
+  var c=CAT_INDEX[$('txCat').value]; $('catHint').textContent=(c&&c.hint)||'';
+}
+function signed(t){ var c=CAT_INDEX[t.cat]; if(c.type==='income') return t.cat==='returns'?-t.cents:t.cents; if(c.type==='expense') return -t.cents; return c.sign*t.cents; }
+
+function renderLedger(){
+  var q=$('fSearch').value.trim().toLowerCase(), ft=$('fType').value, fc=$('fCat').value;
+  var rows=data.transactions.filter(function(t){
+    if(yearOf(t.date)!==year) return false;
+    var c=CAT_INDEX[t.cat];
+    if(ft&&c.type!==ft) return false;
+    if(fc&&t.cat!==fc) return false;
+    if(q&&(t.party+' '+t.memo+' '+t.ref+' '+c.label).toLowerCase().indexOf(q)<0) return false;
+    return true;
+  }).sort(function(a,b){ return a.date<b.date?1:(a.date>b.date?-1:0); });
+  var body=$('txTable').tBodies[0], total=0, html='';
+  rows.forEach(function(t){
+    var c=CAT_INDEX[t.cat], s=signed(t); total+=s;
+    html+='<tr><td class="nowrap">'+esc(t.date)+'</td><td><span class="tag">'+TYPE_LABEL[c.type]+'</span></td><td>'+esc(c.label)+'</td><td>'+esc(t.party)+'</td><td>'+esc(t.memo)+'</td><td>'+esc(t.ref)+'</td>'+
+      '<td class="num '+(s<0?'neg':'pos')+'">'+money(s)+'</td>'+
+      '<td class="nowrap noprint"><button class="btn small" data-edit="'+esc(t.id)+'"'+(locked?' disabled':'')+'>Edit</button> <button class="btn small danger" data-del="'+esc(t.id)+'"'+(locked?' disabled':'')+'>Delete</button></td></tr>';
+  });
+  body.innerHTML=html||'<tr><td colspan="8" class="empty">No entries for '+year+(q||ft||fc?' match these filters':' yet. Add your first one above')+'.</td></tr>';
+  $('txTable').tFoot.innerHTML=rows.length?'<tr><td colspan="6">'+rows.length+' entr'+(rows.length===1?'y':'ies')+' shown, net cash effect</td><td class="num">'+money(total)+'</td><td class="noprint"></td></tr>':'';
+  var parties={}, accts={};
+  data.transactions.forEach(function(t){ if(t.party) parties[t.party]=1; if(t.acct) accts[t.acct]=1; });
+  $('partyList').innerHTML=Object.keys(parties).sort().map(function(p){return '<option value="'+esc(p)+'">';}).join('');
+  $('acctList').innerHTML=Object.keys(accts).sort().map(function(p){return '<option value="'+esc(p)+'">';}).join('');
+}
+
+function renderReports(){
+  var r=summarize(year), s=data.settings;
+  var reserve=num(s.reservePct);
+  var tiles=[
+    ['Gross receipts',money(r.gross-r.returns),'Line 1 less line 2'],
+    ['Deductible expenses',money(r.deductible),'After meals limit'+(r.mileDeduction?' and mileage':'')],
+    ['Net profit (estimate)',money(r.net),'Before the home office and personal deductions']
+  ];
+  if(!isNaN(reserve)&&reserve>0) tiles.push(['Tax reserve target',money(Math.max(0,Math.round(r.net*reserve/100))),reserve+'% of net profit; paid so far '+money((r.eq.estfed||0)+(r.eq.estca||0))]);
+  $('tiles').innerHTML=tiles.map(function(t){ return '<div class="tile"><div class="k">'+t[0]+'</div><div class="v">'+t[1]+'</div><div class="s">'+esc(t[2])+'</div></div>'; }).join('');
+
+  var thr=num(s.feeThreshold); if(isNaN(thr)||thr<=0) thr=250000;
+  var grossAll=r.totalIncome, pct=Math.min(100,Math.round(grossAll/(thr*100)*100));
+  $('feeBox').innerHTML='<strong>California LLC fee watch.</strong> Total income for '+year+' is '+money(grossAll)+' against a threshold of '+money(thr*100)+'.'+
+    '<div class="meter'+(pct>=100?' over':'')+'"><i style="width:'+pct+'%"></i></div>'+
+    '<span class="hint">'+(pct>=100?'At or over the threshold: an LLC fee likely applies on top of the $800 annual tax. Talk to your CPA about the June estimated fee payment.':'The fee is based on total income, not profit. Below the threshold only the $800 annual tax applies.')+'</span>';
+
+  var html='', add=function(line,label,count,amt,cls){ html+='<tr><td>'+esc(line)+'</td><td>'+label+'</td><td class="num">'+(count===''?'':count)+'</td><td class="num '+(cls||'')+'">'+money(amt)+'</td></tr>'; };
+  CATS.income.forEach(function(c){ var a=r.cats[c.id]||0; if(a||c.id==='receipts') add(c.line,esc(c.label),r.count[c.id]||0,c.id==='returns'?-a:a); });
+  html+='<tr><td></td><td><strong>Total income</strong></td><td></td><td class="num"><strong>'+money(r.totalIncome)+'</strong></td></tr>';
+  var byLine={}, order=[];
+  CATS.expense.forEach(function(c){ var a=r.cats[c.id]||0; if(!a) return; add(c.line,esc(c.label),r.count[c.id],a); });
+  if(!r.expenses) html+='<tr><td></td><td class="hint">No expenses recorded</td><td></td><td class="num">'+money(0)+'</td></tr>';
+  if(r.mealsDisallowed) add('24b','Less non-deductible share of meals','',-r.mealsDisallowed);
+  if(r.mileDeduction) add('9','Mileage at standard rate ('+r.miles.toFixed(1)+' mi at $'+r.mileRate+')','',r.mileDeduction);
+  html+='<tr><td></td><td><strong>Total deductible expenses</strong></td><td></td><td class="num"><strong>'+money(r.deductible)+'</strong></td></tr>';
+  $('plTable').tBodies[0].innerHTML=html;
+  $('plTable').tFoot.innerHTML='<tr><td></td><td>Net profit (estimate, before home office deduction)</td><td></td><td class="num '+(r.net<0?'neg':'')+'">'+money(r.net)+'</td></tr>';
+
+  $('qTable').tBodies[0].innerHTML=r.q.map(function(q,i){ return '<tr><td>Q'+(i+1)+' '+year+'</td><td class="num">'+money(q.inc)+'</td><td class="num">'+money(q.exp)+'</td><td class="num">'+money(q.inc-q.exp)+'</td><td class="num">'+money(q.draw)+'</td><td class="num">'+money(q.est)+'</td></tr>'; }).join('');
+
+  var sortDesc=function(o){ return Object.keys(o).sort(function(a,b){return o[b]-o[a];}); };
+  var pk=sortDesc(r.payers);
+  $('payerTable').tBodies[0].innerHTML=pk.length?pk.map(function(k){ return '<tr><td>'+esc(k)+'</td><td class="num">'+money(r.payers[k])+'</td></tr>'; }).join(''):'<tr><td colspan="2" class="empty">No income recorded.</td></tr>';
+  var nec=num(s.necThreshold); if(isNaN(nec)) nec=2000;
+  var ck=sortDesc(r.contractors);
+  $('contractorTable').tBodies[0].innerHTML=ck.length?ck.map(function(k){ var over=r.contractors[k]>=nec*100; return '<tr><td>'+esc(k)+'</td><td class="num">'+money(r.contractors[k])+'</td><td>'+(over?'<span class="tag">At or over threshold</span>':'')+'</td></tr>'; }).join(''):'<tr><td colspan="3" class="empty">No contract labor recorded.</td></tr>';
+  $('contractorHint').textContent='Payees at or over '+money(nec*100)+' are flagged for a possible Form 1099-NEC. Set the threshold in Settings; card payments are usually reported by the card processor instead.';
+
+  var eqHtml='', eqNet=0;
+  CATS.equity.forEach(function(c){ var a=r.eq[c.id]||0; if(!a&&c.id!=='contrib'&&c.id!=='draw') return; eqNet+=c.sign*a; eqHtml+='<tr><td>'+esc(c.label)+'</td><td class="num">'+money(c.sign*a)+'</td></tr>'; });
+  eqHtml+='<tr><td><strong>Net owner activity for '+year+'</strong></td><td class="num"><strong>'+money(eqNet)+'</strong></td></tr>';
+  $('eqTable').tBodies[0].innerHTML=eqHtml;
+}
+
+function renderMileage(){
+  var rows=data.mileage.filter(function(m){return yearOf(m.date)===year;}).sort(function(a,b){return a.date<b.date?1:-1;});
+  var tot=0;
+  $('miTable').tBodies[0].innerHTML=rows.length?rows.map(function(m){ tot+=m.miles; return '<tr><td class="nowrap">'+esc(m.date)+'</td><td>'+esc(m.dest)+'</td><td>'+esc(m.purpose)+'</td><td class="num">'+m.miles.toFixed(1)+'</td><td class="noprint"><button class="btn small danger" data-delmi="'+esc(m.id)+'"'+(locked?' disabled':'')+'>Delete</button></td></tr>'; }).join(''):'<tr><td colspan="5" class="empty">No trips logged for '+year+'.</td></tr>';
+  $('miTable').tFoot.innerHTML=rows.length?'<tr><td colspan="3">Total business miles</td><td class="num">'+tot.toFixed(1)+'</td><td class="noprint"></td></tr>':'';
+  var rate=num(data.settings.mileRate);
+  $('miHint').textContent=isNaN(rate)||!rate?'No mileage rate is set. Enter the IRS standard mileage rate for '+year+' in Settings to see the deduction in Reports.':'At $'+rate+' per mile this is '+money(Math.round(tot*rate*100))+', included in Reports on line 9.';
+}
+
+function renderSettings(){
+  var s=data.settings, a=document.activeElement&&document.activeElement.id;
+  [['sName','name'],['sReserve','reservePct'],['sMile','mileRate'],['sMeals','mealsPct'],['sNec','necThreshold'],['sFee','feeThreshold']].forEach(function(p){ if(a!==p[0]) $(p[0]).value=(s[p[1]]===undefined||s[p[1]]===null)?'':s[p[1]]; });
+  $('legacyWrap').hidden=!data.legacyText; $('legacyBox').value=data.legacyText||'';
+}
+
+function render(){
+  $('bizName').textContent=data.settings.name||'LLC Books';
+  var ys=years(), sel=$('year'); sel.innerHTML=ys.map(function(y){return '<option'+(y===year?' selected':'')+'>'+y+'</option>';}).join('');
+  $('locked').hidden=!locked;
+  Array.prototype.forEach.call(document.querySelectorAll('#txForm input,#txForm select,#txForm button,#miForm input,#miForm button,#tab-settings input:not([type=file]),#impBtn,#impBox,#impFile'),function(el){ el.disabled=locked; });
+  renderLedger(); renderReports(); renderMileage(); renderSettings();
+}
+
+/* ---------- Persistence ---------- */
+function persist(){
+  var text=serialize(); lastText=text;
+  if(standalone){ try{ localStorage.setItem('llc-books-demo',text); setStatus('Saved in this browser (demo mode)'); }catch(e){ setStatus('Demo mode: not saved'); } return; }
+  if(!relay||!note){ setStatus('Not connected to Standard Notes',true); return; }
+  if(locked){ setStatus('Note is locked; change not saved',true); return; }
+  setStatus('Saving...');
+  var r=summarize(year);
+  relay.saveItemWithPresave(note,function(){
+    note.content.text=text;
+    note.content.preview_plain=(data.settings.name||'LLC Books')+': '+data.transactions.length+' entries. '+r.y+' net '+money(r.net);
+    note.content.preview_html=null;
+  },function(){ setStatus('Saved '+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})); });
+}
+function commit(){ render(); persist(); }
+
+function loadText(text){
+  foreignText=null;
+  if(!text||!text.trim()){ data=blank(); showApp(true); return; }
+  var obj=null; try{ obj=JSON.parse(text); }catch(e){}
+  if(obj&&obj.llcBooks){ data=normalize(obj); pickYear(); showApp(true); }
+  else { foreignText=text; showApp(false); }
+}
+function pickYear(){
+  var has={}, max=0; data.transactions.concat(data.mileage).forEach(function(t){ var y=yearOf(t.date); has[y]=1; if(y>max) max=y; });
+  if(!has[year]&&max) year=max;
+}
+function showApp(ok){ $('app').hidden=!ok; $('foreign').hidden=ok; if(ok) render(); }
+
+/* ---------- Events: ledger ---------- */
+function resetForm(){
+  $('txId').value=''; $('txAmt').value=''; $('txParty').value=''; $('txMemo').value=''; $('txRef').value='';
+  $('txSave').textContent='Add entry'; $('txCancel').hidden=true; $('txErr').textContent='';
+}
+$('txType').addEventListener('change',function(){ fillCats($('txCat'),this.value,false); updateEntryLabels(); });
+$('txCat').addEventListener('change',updateEntryLabels);
+$('txForm').addEventListener('submit',function(e){
+  e.preventDefault(); if(locked) return;
+  var cents=toCents($('txAmt').value), date=$('txDate').value;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ $('txErr').textContent='Enter a valid date.'; return; }
+  if(isNaN(cents)||cents<=0){ $('txErr').textContent='Enter a positive amount, for example 1250.00. The type sets whether it is money in or out.'; return; }
+  var t={id:$('txId').value||uid(), date:date, cat:$('txCat').value, cents:cents, party:$('txParty').value.trim(), memo:$('txMemo').value.trim(), ref:$('txRef').value.trim(), acct:$('txAcct').value.trim()};
+  var i=data.transactions.findIndex(function(x){return x.id===t.id;});
+  if(i>=0) data.transactions[i]=t; else data.transactions.push(t);
+  year=yearOf(date); resetForm(); commit(); $('txAmt').focus();
+});
+$('txCancel').addEventListener('click',resetForm);
+$('txTable').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b||locked) return;
+  if(b.dataset.edit){
+    var t=data.transactions.find(function(x){return x.id===b.dataset.edit;}); if(!t) return;
+    var c=CAT_INDEX[t.cat];
+    $('txId').value=t.id; $('txDate').value=t.date; $('txType').value=c.type; fillCats($('txCat'),c.type,false); $('txCat').value=t.cat;
+    $('txAmt').value=(t.cents/100).toFixed(2); $('txParty').value=t.party; $('txMemo').value=t.memo; $('txRef').value=t.ref; $('txAcct').value=t.acct;
+    $('txSave').textContent='Save changes'; $('txCancel').hidden=false; updateEntryLabels(); $('txDate').focus(); window.scrollTo(0,0);
+  } else if(b.dataset.del){
+    if(b.dataset.armed){ data.transactions=data.transactions.filter(function(x){return x.id!==b.dataset.del;}); if($('txId').value===b.dataset.del) resetForm(); commit(); }
+    else { b.dataset.armed='1'; b.textContent='Confirm delete'; setTimeout(function(){ if(b.isConnected){ delete b.dataset.armed; b.textContent='Delete'; } },4000); }
+  }
+});
+['fSearch','fType','fCat'].forEach(function(id){ $(id).addEventListener('input',renderLedger); });
+$('year').addEventListener('change',function(){ year=parseInt(this.value,10); render(); });
+
+/* ---------- Events: mileage ---------- */
+$('miForm').addEventListener('submit',function(e){
+  e.preventDefault(); if(locked) return;
+  var miles=num($('miMiles').value), date=$('miDate').value;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||isNaN(miles)||miles<=0){ $('miErr').textContent='Enter a date and a positive number of miles.'; return; }
+  $('miErr').textContent='';
+  data.mileage.push({id:uid(), date:date, miles:Math.round(miles*10)/10, dest:$('miDest').value.trim(), purpose:$('miPurpose').value.trim()});
+  year=yearOf(date); $('miMiles').value=''; $('miDest').value=''; $('miPurpose').value=''; commit();
+});
+$('miTable').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b||!b.dataset.delmi||locked) return;
+  if(b.dataset.armed){ data.mileage=data.mileage.filter(function(x){return x.id!==b.dataset.delmi;}); commit(); }
+  else { b.dataset.armed='1'; b.textContent='Confirm delete'; setTimeout(function(){ if(b.isConnected){ delete b.dataset.armed; b.textContent='Delete'; } },4000); }
+});
+
+/* ---------- Events: settings, export, import ---------- */
+[['sName','name',false],['sReserve','reservePct',true],['sMile','mileRate',true],['sMeals','mealsPct',true],['sNec','necThreshold',true],['sFee','feeThreshold',true]].forEach(function(p){
+  $(p[0]).addEventListener('change',function(){
+    if(locked) return; var v=this.value.trim();
+    if(p[2]&&v!==''){ var n=num(v); if(isNaN(n)||n<0){ this.value=data.settings[p[1]]; return; } v=n; }
+    data.settings[p[1]]=v; commit();
+  });
+});
+function csv(){
+  var q=function(s){ s=String(s==null?'':s); if(/^[=+\-@\t\r]/.test(s)) s="'"+s; return '"'+s.replace(/"/g,'""')+'"'; };
+  var lines=['Date,Type,Category,Schedule C line,Payee or payer,Description,Reference,Paid via,Amount,Signed amount'];
+  data.transactions.filter(function(t){return yearOf(t.date)===year;}).sort(function(a,b){return a.date<b.date?-1:1;}).forEach(function(t){
+    var c=CAT_INDEX[t.cat];
+    lines.push([t.date,TYPE_LABEL[c.type],q(c.label),c.line||'',q(t.party),q(t.memo),q(t.ref),q(t.acct),(t.cents/100).toFixed(2),(signed(t)/100).toFixed(2)].join(','));
+  });
+  return lines.join('\r\n');
+}
+function download(name,text,type){
+  try{
+    var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:type})); a.download=name;
+    document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },1000);
+    setStatus('Download started. If nothing downloads, use the "Show to copy" buttons.');
+  }catch(e){ show(text); }
+}
+function show(text){ var o=$('outBox'); o.hidden=false; o.value=text; o.focus(); o.select(); }
+$('expCsv').addEventListener('click',function(){ download('llc-books-'+year+'.csv',csv(),'text/csv'); });
+$('expJson').addEventListener('click',function(){ download('llc-books-backup-'+today()+'.json',serialize(),'application/json'); });
+$('showCsv').addEventListener('click',function(){ show(csv()); });
+$('showJson').addEventListener('click',function(){ show(serialize()); });
+$('impFile').addEventListener('change',function(){
+  var f=this.files&&this.files[0]; if(!f) return;
+  var rd=new FileReader(); rd.onload=function(){ $('impBox').value=String(rd.result||''); $('impMsg').textContent='File loaded. Review it, then press the replace button.'; }; rd.readAsText(f);
+});
+$('impBtn').addEventListener('click',function(){
+  if(locked) return; var b=this, obj=null;
+  try{ obj=JSON.parse($('impBox').value); }catch(e){}
+  if(!obj||!obj.llcBooks||!Array.isArray(obj.transactions)){ $('impMsg').textContent='That is not a valid LLC Books backup.'; return; }
+  if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Confirm: replace '+data.transactions.length+' entries with '+obj.transactions.length; setTimeout(function(){ delete b.dataset.armed; b.textContent='Replace ledger with this backup'; },5000); return; }
+  delete b.dataset.armed; b.textContent='Replace ledger with this backup';
+  var legacy=data.legacyText; data=normalize(obj); if(legacy&&!data.legacyText) data.legacyText=legacy;
+  $('impBox').value=''; $('impMsg').textContent='Restored '+data.transactions.length+' entries.'; commit();
+});
+$('printBtn').addEventListener('click',function(){ try{ window.print(); }catch(e){} });
+$('adopt').addEventListener('click',function(){
+  if(locked) return; data=blank(); data.legacyText=foreignText||''; foreignText=null; showApp(true); persist();
+});
+
+/* ---------- Tabs ---------- */
+Array.prototype.forEach.call(document.querySelectorAll('nav.tabs button'),function(b){
+  b.addEventListener('click',function(){
+    Array.prototype.forEach.call(document.querySelectorAll('nav.tabs button'),function(x){ x.setAttribute('aria-selected',x===b?'true':'false'); });
+    ['ledger','reports','mileage','settings'].forEach(function(t){ $('tab-'+t).hidden=(t!==b.dataset.tab); });
+    render();
+  });
+});
+
+/* ---------- Init ---------- */
+fillCats($('txCat'),'income',false); fillCats($('fCat'),null,true);
+$('txDate').value=today(); $('miDate').value=today(); updateEntryLabels();
+
+standalone=(window.parent===window)||!window.ComponentRelay;
+if(standalone){
+  $('modeLabel').textContent='demo mode, outside Standard Notes';
+  var saved=null; try{ saved=localStorage.getItem('llc-books-demo'); }catch(e){}
+  loadText(saved||'');
+} else {
+  setStatus('Connecting to Standard Notes...');
+  var Relay=window.ComponentRelay.default||window.ComponentRelay;
+  relay=new Relay({
+    targetWindow:window,
+    options:{coallesedSaving:true, coallesedSavingDelay:300, acceptsThemes:true},
+    onReady:function(){ setStatus('Connected'); }
+  });
+  relay.streamContextItem(function(item){
+    if(!item) return;
+    var prevUuid=note&&note.uuid; note=item;
+    var appData=(item.content&&item.content.appData&&item.content.appData['org.standardnotes.sn'])||{};
+    var wasLocked=locked; locked=!!appData.locked;
+    var text=(item.content&&typeof item.content.text==='string')?item.content.text:'';
+    if(item.isMetadataUpdate||(prevUuid===item.uuid&&text===lastText)){ if(wasLocked!==locked&&!$('app').hidden) render(); $('locked').hidden=!locked; return; }
+    lastText=text; if(prevUuid!==item.uuid){ resetForm(); }
+    loadText(text); setStatus('Loaded');
+  });
+}
+})();
+</script>
+</body>
+</html>
