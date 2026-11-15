@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LLC Books</title>
 <!--
-  LLC Books 1.4: a cash-basis ledger, invoicing and receipt store for a single-member LLC,
+  LLC Books 1.5: a cash-basis ledger, invoicing and receipt store for a single-member LLC,
   built as a Standard Notes editor plugin. All data, including receipt images, is stored as JSON
   in the text of the note that is open. This page makes no network requests.
   Communication with Standard Notes uses the official component relay (component-relay.js, AGPL-3.0).
@@ -109,6 +109,8 @@ details[open] summary{margin-bottom:10px}
 .sheet.doc{font-size:13px}.sheet.doc h1{font-size:19px;margin:0 0 6px}.sheet.doc h2{color:#111;border-bottom:2px solid #111;padding-bottom:3px}
 .sheet th{background:#eee;color:#333}.sheet td{border-color:#ddd}.sheet tfoot td{background:#f4f4f4}.sheet .hint,.sheet .empty{color:#555}.sheet .tag{color:#555;border-color:#aaa}.sheet .pos,.sheet .neg{color:inherit}
 .clock{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums;padding-top:3px}
+.att{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:9px 12px;margin-bottom:8px;background:var(--panel)}
+.att.warn{border-left-color:var(--warn)}.att.ok{border-left-color:var(--good)}
 [hidden]{display:none!important}
 #overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 12px;z-index:10}
 #overlay .box{background:var(--bg);border:1px solid var(--line);border-radius:10px;max-width:820px;width:100%;padding:16px}
@@ -152,16 +154,28 @@ details[open] summary{margin-bottom:10px}
 
   <div id="app" hidden>
   <nav class="tabs" role="tablist" aria-label="Sections">
-    <button role="tab" data-tab="ledger" aria-selected="true">Ledger</button>
+    <button role="tab" data-tab="home" aria-selected="true">Home</button>
+    <button role="tab" data-tab="ledger" aria-selected="false">Ledger</button>
     <button role="tab" data-tab="invoices" aria-selected="false">Invoices</button>
     <button role="tab" data-tab="time" aria-selected="false">Time</button>
+    <button role="tab" data-tab="calendar" aria-selected="false">Calendar</button>
     <button role="tab" data-tab="reports" aria-selected="false">Reports</button>
     <button role="tab" data-tab="mileage" aria-selected="false">Mileage</button>
     <button role="tab" data-tab="settings" aria-selected="false">Settings and backup</button>
   </nav>
 
   <!-- LEDGER -->
-  <section id="tab-ledger" role="tabpanel">
+  <!-- HOME -->
+  <section id="tab-home" role="tabpanel">
+    <div class="tiles" id="hmTiles"></div>
+    <h2>Needs attention</h2>
+    <div id="hmList"></div>
+    <h2>Coming up</h2>
+    <div class="tablewrap"><table id="hmCal"><thead><tr><th>Date</th><th>When</th><th>Item</th><th>Status</th><th class="noprint"></th></tr></thead><tbody></tbody></table></div>
+    <div class="row noprint" style="margin-top:10px"><button class="btn" type="button" data-go="calendar">Open the full calendar</button></div>
+  </section>
+
+  <section id="tab-ledger" role="tabpanel" hidden>
     <form class="entry" id="txForm" autocomplete="off">
       <input type="hidden" id="txId">
       <div class="f w2"><label for="txDate">Date</label><input type="date" id="txDate" required></div>
@@ -335,6 +349,39 @@ details[open] summary{margin-bottom:10px}
     <textarea id="tmOut" class="code" readonly hidden aria-label="Time export" style="margin-top:10px"></textarea>
   </section>
 
+  <!-- CALENDAR -->
+  <section id="tab-calendar" role="tabpanel" hidden>
+    <div id="calSetup" class="notice" hidden>Enter the date the Secretary of State filed your Articles of Organization, or the date you plan to file. The Statement of Information and the first $800 payment are counted from it.</div>
+    <div class="grid2">
+      <div><label for="cFormed">Date the Articles of Organization were filed</label><input type="date" id="cFormed" class="mut"></div>
+      <div><label for="cDays">Remind me this many days ahead</label><input id="cDays" class="mut" inputmode="numeric"></div>
+      <div><label for="cRetDay">Invoice retainer clients on day of month</label><input id="cRetDay" class="mut" inputmode="numeric"></div>
+      <div><label for="cRetFor">Each retainer invoice covers</label><select id="cRetFor" class="mut"><option value="this">The same month (billed in advance)</option><option value="last">The month before (billed in arrears)</option></select></div>
+      <div style="align-self:end"><label class="inline"><input type="checkbox" id="cPopup" class="mut"> Show a pop-up of upcoming items when this ledger opens</label></div>
+    </div>
+    <h2>Deadlines and reminders</h2>
+    <div class="filters noprint"><div style="flex:0 0 auto"><label class="inline"><input type="checkbox" id="cShowDone"> Show completed items</label></div></div>
+    <div class="tablewrap"><table id="calTable"><thead><tr><th>Date</th><th>When</th><th>Item</th><th>Status</th><th class="noprint"></th></tr></thead><tbody></tbody></table></div>
+    <p class="hint">Overdue items and the next 12 months. Built-in deadlines assume a calendar tax year and a single-member LLC owned by an individual; confirm them with your CPA and the agencies. Dates on a weekend move to the next business day, and the January estimate allows for the federal holiday, but other holidays are not accounted for.</p>
+
+    <h2>Add your own reminder</h2>
+    <form class="entry" id="remForm" autocomplete="off">
+      <div class="f w6"><label for="rmTitle">Reminder</label><input id="rmTitle" placeholder="Renew city business license"></div>
+      <div class="f w2"><label for="rmDate">First due date</label><input type="date" id="rmDate"></div>
+      <div class="f w4"><label for="rmFreq">Repeats</label><select id="rmFreq"><option value="once">Once</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly" selected>Yearly</option><option value="biennial">Every two years</option></select></div>
+      <div class="f w12"><label for="rmNotes">Notes (optional)</label><input id="rmNotes"></div>
+      <div class="actions"><button class="btn primary" type="submit">Add reminder</button><span class="hint">Ideas: city business license, insurance renewals, registered agent and business address renewals, and the CDFI board's approval of your contract.</span><span class="hint neg" id="rmErr" role="alert"></span></div>
+    </form>
+
+    <h2>Built-in reminders</h2>
+    <div class="tablewrap"><table id="calTypes"><thead><tr><th>On</th><th>Reminder</th><th>When</th></tr></thead><tbody></tbody></table></div>
+
+    <h2>Get reminders on your phone</h2>
+    <p class="hint">This plugin can only show reminders while the ledger note is open. For notifications at any time, download a calendar file and import it into Google Calendar, Apple Calendar or Outlook. It holds every open item for the next 18 months, each with an alert at 9 a.m. the chosen number of days ahead and another the day before. Some apps, possibly including Google Calendar, ignore alerts in an imported file and apply the calendar's default notifications, so check one event after importing. Re-importing after changes can create duplicates; importing into a separate calendar that you delete and replace avoids that.</p>
+    <div class="row"><button class="btn primary" type="button" id="icsDl">Download calendar file (.ics)</button><button class="btn" type="button" id="icsShow">Show calendar file to copy</button><span class="hint" id="icsMsg"></span></div>
+    <textarea id="icsOut" class="code" readonly hidden aria-label="Calendar file" style="margin-top:10px"></textarea>
+  </section>
+
   <!-- REPORTS -->
   <section id="tab-reports" role="tabpanel" hidden>
     <div class="tiles" id="tiles"></div>
@@ -503,7 +550,7 @@ var RCPT_MAX=350*1024, STORE_WARN=4*1024*1024;
 
 /* ---------- State ---------- */
 function blank(){
-  return {llcBooks:1, settings:{name:'', email:'', address:'', reservePct:'', mileRate:'', mealsPct:50, necThreshold:2000, feeThreshold:250000, invPrefix:'INV-', invNext:1001, invTerms:30, invFooter:'', customCats:[], hiddenCats:[], estTargets:{}, timeRound:6}, transactions:[], mileage:[], clients:[], invoices:[], receipts:{}, recurring:[], time:[], timer:null};
+  return {llcBooks:1, settings:{name:'', email:'', address:'', reservePct:'', mileRate:'', mealsPct:50, necThreshold:2000, feeThreshold:250000, invPrefix:'INV-', invNext:1001, invTerms:30, invFooter:'', customCats:[], hiddenCats:[], estTargets:{}, timeRound:6, formationDate:'', remindDays:14, popupOnOpen:true, calOff:[], calSnooze:'', calStart:today(), retDay:1, retFor:'this', lastBackup:''}, transactions:[], mileage:[], clients:[], invoices:[], receipts:{}, recurring:[], time:[], timer:null, reminders:[], calDone:{}};
 }
 var data = blank();
 var note = null, relay = null, locked = false, lastText = null, standalone = false, foreignText = null;
@@ -587,6 +634,11 @@ function normalize(obj){
     .map(function(e){ return {id:e.id||uid(), date:str(e.date).slice(0,10), clientId:str(e.clientId), clientName:str(e.clientName), hours:Math.round(+e.hours*100)/100, desc:str(e.desc), tag:str(e.tag), rate:(isFinite(+e.rate)&&+e.rate>0)?Math.round(+e.rate):0, billable:e.billable!==false, invoiceId:str(e.invoiceId)}; });
   var invIds={}; d.invoices.forEach(function(i){ invIds[i.id]=1; }); d.time.forEach(function(e){ if(e.invoiceId&&!invIds[e.invoiceId]) e.invoiceId=''; });
   if(obj.timer&&typeof obj.timer==='object'&&isFinite(+obj.timer.start)&&+obj.timer.start>0) d.timer={start:+obj.timer.start, clientId:str(obj.timer.clientId), desc:str(obj.timer.desc), tag:str(obj.timer.tag)};
+  if(!Array.isArray(d.settings.calOff)) d.settings.calOff=[];
+  if(Array.isArray(obj.reminders)) d.reminders=obj.reminders.filter(function(r){ return r&&r.title&&isDate(r.date)&&CALF[r.freq]!==undefined||r&&r.title&&isDate(r.date)&&r.freq==='once'; })
+    .map(function(r){ return {id:r.id||uid(), title:str(r.title), date:r.date, freq:r.freq, notes:str(r.notes), added:isDate(r.added)?r.added:r.date}; });
+  if(obj.calDone&&typeof obj.calDone==='object'&&!Array.isArray(obj.calDone)){ var cutD=addDays(today(),-800); Object.keys(obj.calDone).forEach(function(k){ var dt=k.split('|')[1]; if(isDate(dt)&&dt>=cutD&&isDate(obj.calDone[k])) d.calDone[k]=obj.calDone[k]; }); }
+  if(!(obj.settings&&isDate(obj.settings.calStart))){ var e0=''; d.transactions.concat(d.time,d.invoices,d.mileage).forEach(function(x){ if(!e0||x.date<e0) e0=x.date; }); d.settings.calStart=e0||today(); }
   /* drop receipts nothing points to */
   var used={}; d.transactions.forEach(function(t){ if(t.receiptId) used[t.receiptId]=1; });
   Object.keys(d.receipts).forEach(function(id){ if(!used[id]) delete d.receipts[id]; });
@@ -800,7 +852,7 @@ function render(){
   $('bizName').textContent=data.settings.name||'LLC Books';
   var ys=years(), sel=$('year'); sel.innerHTML=ys.map(function(y){return '<option'+(y===year?' selected':'')+'>'+y+'</option>';}).join('');
   $('locked').hidden=!locked;
-  renderLedger(); renderInvoices(); renderTime(); renderReports(); renderMileage(); renderSettings();
+  renderLedger(); renderInvoices(); renderTime(); renderReports(); renderMileage(); renderSettings(); renderCalendar(); renderHome();
   Array.prototype.forEach.call(document.querySelectorAll('#app form input,#app form select,#app form textarea,#app form button,#app .set,#app .mut,#impBtn,#impBox,#impFile'),function(el){ el.disabled=locked; });
   syncRateField();
 }
@@ -836,7 +888,7 @@ function showApp(ok){ $('app').hidden=!ok; $('foreign').hidden=ok; if(ok){ reset
 /* ---------- Overlay ---------- */
 function openOverlay(html){ $('ovBox').innerHTML=html; $('overlay').hidden=false; var b=$('ovBox').querySelector('button'); if(b) b.focus(); }
 function closeOverlay(){ $('overlay').hidden=true; $('ovBox').innerHTML=''; document.body.classList.remove('print-sheet'); }
-$('overlay').addEventListener('click',function(e){ if(e.target===this||e.target.closest('[data-close]')) closeOverlay(); });
+$('overlay').addEventListener('click',function(e){ if(e.target===this||e.target.closest('[data-close]')){ closeOverlay(); popOpen=false; } });
 document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&!$('overlay').hidden) closeOverlay(); });
 
 /* ---------- Receipts ---------- */
@@ -1129,9 +1181,9 @@ function download(name,text,type){
 }
 function show(text){ var o=$('outBox'); o.hidden=false; o.value=text; o.focus(); o.select(); }
 $('expCsv').addEventListener('click',function(){ download('llc-books-'+year+'.csv',csv(),'text/csv'); });
-$('expJson').addEventListener('click',function(){ download('llc-books-backup-'+today()+'.json',serialize(),'application/json'); });
+$('expJson').addEventListener('click',function(){ if(!locked) data.settings.lastBackup=today(); download('llc-books-backup-'+today()+'.json',serialize(),'application/json'); if(!locked) commit(); });
 $('showCsv').addEventListener('click',function(){ show(csv()); });
-$('showJson').addEventListener('click',function(){ show(serialize()); });
+$('showJson').addEventListener('click',function(){ if(!locked) data.settings.lastBackup=today(); show(serialize()); if(!locked) commit(); });
 $('impFile').addEventListener('change',function(){
   var f=this.files&&this.files[0]; if(!f) return;
   var rd=new FileReader(); rd.onload=function(){ $('impBox').value=String(rd.result||''); $('impMsg').textContent='File loaded. Review it, then press the replace button.'; }; rd.readAsText(f);
@@ -1465,11 +1517,179 @@ function timeCsv(){
 $('tmCsvDl').addEventListener('click',function(){ download('llc-books-time-'+year+'.csv',timeCsv(),'text/csv'); });
 $('tmCsvShow').addEventListener('click',function(){ var o=$('tmOut'); o.hidden=false; o.value=timeCsv(); o.focus(); o.select(); });
 
+/* ---------- Compliance calendar ---------- */
+var CALF={monthly:1,quarterly:3,yearly:12,biennial:24};
+var CAL_TYPES=[
+  ['ca800','$800 California annual LLC tax','April 15 each year; the first year is counted from the filing date'],
+  ['returns','Annual tax returns (1040 with Schedules C and SE, California 540, LLC Form 568)','April 15, for the prior year'],
+  ['est','Federal and California estimated tax','April 15, June 15, September 15 and January 15; marked covered automatically once your payments meet the targets in Reports'],
+  ['fee','California LLC fee estimate (FTB 3536)','June 15, shown only once the year\'s income reaches 40% of the LLC fee threshold'],
+  ['nec','Forms 1099-NEC for contractors','January 31, shown only if you recorded contract labor the year before'],
+  ['soi','Statement of Information (LLC-12)','90 days after the filing date, then by the end of the filing month every two years'],
+  ['close','Monthly close','The 10th of each month, for the month before'],
+  ['retainer','Retainer invoices','Each month for each retainer client; marked done automatically when that month\'s invoice exists']
+];
+var popOpen=false, popShownFor=null;
+function fdate(){ return isDate(data.settings.formationDate)?data.settings.formationDate:''; }
+function calStartDate(){ return fdate()||(isDate(data.settings.calStart)?data.settings.calStart:today()); }
+function remDays(){ var n=parseInt(data.settings.remindDays,10); return isNaN(n)?14:Math.min(90,Math.max(0,n)); }
+function calOn(id){ return (data.settings.calOff||[]).indexOf(id)<0; }
+function lastDay(y,m){ return new Date(Date.UTC(y,m,0)).getUTCDate(); }
+function prevMonth(mo){ return stepDate(mo+'-01',-1,1).slice(0,7); }
+function firstMonthFor(cid){ var m=''; data.time.forEach(function(e){ if(e.clientId===cid&&(!m||e.date.slice(0,7)<m)) m=e.date.slice(0,7); }); data.invoices.forEach(function(i){ if(i.clientId===cid&&i.retainerMonth&&(!m||i.retainerMonth<m)) m=i.retainerMonth; }); return m||today().slice(0,7); }
+function estData(ty){
+  var due=estDue(ty), start=estDue(ty-1)[3], tg=(data.settings.estTargets||{})[String(ty)]||{}, fedT=Math.round((num(tg.fed)||0)*100), caT=Math.round((num(tg.ca)||0)*100), fp=[0,0,0,0], cp=[0,0,0,0];
+  data.transactions.forEach(function(t){ if(t.cat!=='estfed'&&t.cat!=='estca') return; if(t.date<=start||t.date>due[3]) return; var i=0; while(i<3&&t.date>due[i]) i++; (t.cat==='estfed'?fp:cp)[i]+=t.cents; });
+  var fs=[0.25,0.25,0.25,0.25], cs=[0.3,0.4,0,0.3], a=0,b=0,c=0,d=0, short=[];
+  for(var i=0;i<4;i++){ a+=Math.round(fedT*fs[i]); b+=fp[i]; c+=Math.round(caT*cs[i]); d+=cp[i]; short.push(Math.max(0,a-b)+Math.max(0,c-d)); }
+  return {due:due, set:!!(fedT||caT), short:short};
+}
+function occurrences(toDays){
+  var td=today(), start=calStartDate(), from=start<addDays(td,-400)?addDays(td,-400):start, to=addDays(td,toDays||400), out=[], fd=fdate(), fy=yearOf(start), s=data.settings, thr=num(s.feeThreshold);
+  if(isNaN(thr)||thr<=0) thr=250000;
+  function add(id,date,title,detail,tab,auto){ if(date<from||date>to||!calOn(id)) return; out.push({id:id,key:id+'|'+date,date:date,title:title,detail:detail||'',tab:tab||'',auto:auto||''}); }
+  for(var y=yearOf(from)-1;y<=yearOf(to)+1;y++){
+    if(y>=fy){
+      var d800=roll(y+'-04-15');
+      if(y===fy&&fd){ var m=+fd.slice(5,7)+3, yy=y; if(m>12){ m-=12; yy++; } d800=roll(yy+'-'+pad(m)+'-15'); }
+      add('ca800',d800,'Pay the $800 California annual LLC tax for '+y,'Form FTB 3522 or FTB Web Pay. Record the payment in the ledger under Taxes and licenses.','ledger');
+      var ed=estData(y), lab=['1 of 4: federal and California (30%)','2 of 4: federal and California (40%)','3 of 4: federal only, no California payment','4 of 4: federal and California (30%)'];
+      for(var i=0;i<4;i++){ var cov=ed.set&&ed.short[i]===0; add('est',ed.due[i],'Estimated tax for '+y+', installment '+lab[i],ed.set?(cov?'Covered by payments recorded in the ledger.':money(ed.short[i])+' still to pay to reach the targets in Reports.'):'Set your annual targets in Reports to track this.','reports',cov?'Covered':''); }
+      if(y<=yearOf(td)&&summarize(y).totalIncome>=thr*40) add('fee',roll(y+'-06-15'),'Estimate and pay the California LLC fee for '+y+' (FTB 3536)','Applies only if total California income for '+y+' will reach '+money(thr*100)+'. Ask your CPA.','reports');
+    }
+    if(y-1>=fy){
+      add('returns',roll(y+'-04-15'),'File '+(y-1)+' tax returns: Form 1040 with Schedules C and SE, California 540, and LLC Form 568','Form 568 is due with your personal return. Give your CPA the year-end package from Reports.','reports');
+      if(Object.keys(summarize(y-1).contractors).length) add('nec',roll(y+'-01-31'),'Send and file Forms 1099-NEC for '+(y-1)+' contractors','Check the contract labor report for payees at or over the threshold.','reports');
+    }
+    if(fd&&y===fy) add('soi',addDays(fd,90),'File the initial Statement of Information (LLC-12), $20','Due within 90 days of filing the Articles. A late filing can bring a $250 penalty.','');
+    if(fd&&y>fy&&(y-fy)%2===0){ var fm=+fd.slice(5,7); add('soi',y+'-'+pad(fm)+'-'+pad(lastDay(y,fm)),'File the biennial Statement of Information (LLC-12), $20','Due by the end of the month the LLC was formed, every two years. Confirm the filing window on bizfile Online.',''); }
+  }
+  var sm=start.slice(0,7), endM=to.slice(0,7), M=sm, guard=0, rd=Math.min(28,Math.max(1,parseInt(s.retDay,10)||1)), rets=data.clients.filter(function(c){return c.billing==='retainer';});
+  while(M<=endM&&guard<60){
+    var pm=prevMonth(M);
+    if(pm>=sm) add('close',M+'-10','Monthly close for '+monthName(pm)+': reconcile accounts, attach receipts, export a backup','Use the "Not yet reconciled" and "Expenses missing a receipt" filters on the Ledger tab.','ledger');
+    rets.forEach(function(c){ var fm2=s.retFor==='last'?pm:M; if(fm2<sm||fm2<firstMonthFor(c.id)) return; var ex=retInvoiceFor(c.id,fm2), dt=M+'-'+pad(rd);
+      if(dt<from||dt>to||!calOn('retainer')) return; out.push({id:'retainer',key:'ret'+c.id+'|'+dt,date:dt,title:'Invoice '+c.name+' retainer for '+monthName(fm2),detail:'Bill it from the Time tab.',tab:'time',auto:ex?'Invoiced '+ex.number:''}); });
+    M=stepDate(M+'-01',1,1).slice(0,7); guard++;
+  }
+  var floor=addDays(td,-400);
+  data.reminders.forEach(function(r){ var d=r.date, n=0, day=+r.date.slice(8,10);
+    while(d<=to&&n<600){ if(d>=floor&&(d>=r.added||d===r.date)) out.push({id:'custom',custom:r.id,key:'c'+r.id+'|'+d,date:d,title:r.title,detail:r.notes,tab:'',auto:''}); if(r.freq==='once') break; d=stepDate(d,CALF[r.freq],day); n++; } });
+  out.forEach(function(o){ o.done=data.calDone[o.key]||''; });
+  out.sort(function(a,b){ return a.date<b.date?-1:(a.date>b.date?1:a.title.localeCompare(b.title)); });
+  return out;
+}
+function occStatus(o){ if(o.done||o.auto) return 'done'; var td=today(); if(o.date<td) return 'overdue'; return daysBetween(td,o.date)<=remDays()?'soon':'later'; }
+function whenText(o){ var n=daysBetween(today(),o.date); return n<0?'Overdue by '+(-n)+' day'+(n===-1?'':'s'):(n===0?'Today':(n===1?'Tomorrow':'In '+n+' days')); }
+function dueSoon(){ return occurrences(120).filter(function(o){ var st=occStatus(o); return st==='overdue'||st==='soon'; }); }
+function statusTag(o){ var st=occStatus(o); return st==='done'?'<span class="tag good">'+esc(o.auto||('Done '+o.done))+'</span>':(st==='overdue'?'<span class="tag warn">Overdue</span>':(st==='soon'?'<span class="tag">Due soon</span>':'')); }
+function occActions(o){ var st=occStatus(o), a='';
+  if(o.tab) a+='<button class="btn small" type="button" data-go="'+o.tab+'">Open</button> ';
+  if(!o.auto) a+=st==='done'?'<button class="btn small mut" type="button" data-cundo="'+esc(o.key)+'">Undo</button>':'<button class="btn small mut" type="button" data-cdone="'+esc(o.key)+'">Mark done</button>';
+  return a; }
+function occRow(o,withDel){ return '<tr><td class="nowrap">'+esc(o.date)+'</td><td class="nowrap">'+(occStatus(o)==='done'?'':whenText(o))+'</td><td>'+esc(o.title)+(o.detail?'<div class="hint">'+esc(o.detail)+'</div>':'')+'</td><td>'+statusTag(o)+'</td><td class="acts noprint">'+occActions(o)+(withDel&&o.custom?' <button class="btn small danger mut" type="button" data-remdel="'+esc(o.custom)+'">Delete</button>':'')+'</td></tr>'; }
+function renderCalendar(){
+  var s=data.settings, a=document.activeElement&&document.activeElement.id;
+  if(a!=='cFormed') $('cFormed').value=fdate(); if(a!=='cDays') $('cDays').value=remDays(); if(a!=='cRetDay') $('cRetDay').value=Math.min(28,Math.max(1,parseInt(s.retDay,10)||1));
+  $('cRetFor').value=s.retFor==='last'?'last':'this'; $('cPopup').checked=s.popupOnOpen!==false; $('calSetup').hidden=!!fdate();
+  var lim=addDays(today(),365), show=$('cShowDone').checked;
+  var rows=occurrences(400).filter(function(o){ return o.date<=lim&&(show||occStatus(o)!=='done'); });
+  $('calTable').tBodies[0].innerHTML=rows.length?rows.map(function(o){ return occRow(o,true); }).join(''):'<tr><td colspan="5" class="empty">Nothing scheduled.</td></tr>';
+  $('calTypes').tBodies[0].innerHTML=CAL_TYPES.map(function(t){ return '<tr><td><input type="checkbox" class="mut" aria-label="'+esc(t[1])+'" data-ctype="'+t[0]+'"'+(calOn(t[0])?' checked':'')+'></td><td>'+esc(t[1])+'</td><td class="hint">'+esc(t[2])+'</td></tr>'; }).join('');
+}
+function attention(){
+  var td=today(), y=yearOf(td), r=summarize(y), L=[], s=data.settings;
+  function add(lvl,text,btn,go,filter){ L.push({lvl:lvl,text:text,btn:btn,go:go,filter:filter||''}); }
+  if(!fdate()) add('info','Enter the date your Articles of Organization were filed (or will be) so the calendar can count your state deadlines from it.','Open calendar','calendar');
+  var od=occurrences(30).filter(function(o){return occStatus(o)==='overdue';});
+  if(od.length) add('warn',od.length+' calendar item'+(od.length===1?' is':'s are')+' overdue, the oldest from '+od[0].date+': '+od[0].title+'.','Open calendar','calendar');
+  var cands=[]; [y-1,y].forEach(function(ty){ var e=estData(ty); e.due.forEach(function(d,i){ cands.push({ty:ty,i:i,d:d,e:e}); }); });
+  var nx=cands.filter(function(c){ return c.d>=td&&c.ty>=yearOf(calStartDate()); }).sort(function(a,b){return a.d<b.d?-1:1;})[0];
+  if(nx){ if(nx.e.set){ var sh=nx.e.short[nx.i]; if(sh>0) add(daysBetween(td,nx.d)<=30?'warn':'info',money(sh)+' of estimated tax for '+nx.ty+' is still to pay by '+nx.d+' to stay on target.','Open tracker','reports'); }
+    else if(r.totalIncome>0) add('info','You have income this year but no estimated tax targets. Ask your CPA for the amounts and enter them in Reports.','Open tracker','reports'); }
+  var oi=data.invoices.filter(invOverdue), ot=oi.reduce(function(a,i){return a+invTotal(i);},0);
+  if(oi.length) add('warn',oi.length+' invoice'+(oi.length===1?' is':'s are')+' overdue, totalling '+money(ot)+'.','Open invoices','invoices');
+  var dr=data.invoices.filter(function(i){return i.status==='draft';});
+  if(dr.length) add('info',dr.length+' draft invoice'+(dr.length===1?' has':'s have')+' not been marked sent.','Open invoices','invoices');
+  var uh=0, ua=0; data.time.forEach(function(e){ if(tmStatus(e)==='un'){ uh+=e.hours; ua+=Math.round(e.hours*e.rate); } });
+  if(uh) add('info',fmtH(uh)+' hours of hourly time are unbilled ('+money(ua)+').','Open time','time');
+  if(data.timer) add('info','A timer has been running since '+new Date(data.timer.start).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+'.','Open time','time');
+  var rq=dueRecurring().length; if(rq) add('info',rq+' recurring entr'+(rq===1?'y is':'ies are')+' due to be added to the ledger.','Open ledger','ledger');
+  var cut=addDays(td,-30), un=data.transactions.filter(function(t){return !t.rec&&t.date<cut;}).length;
+  if(un) add('info',un+' ledger entr'+(un===1?'y':'ies')+' older than 30 days '+(un===1?'is':'are')+' not yet reconciled.','Show them','ledger','unrec');
+  if(r.noRcpt) add('info',r.noRcpt+' expense'+(r.noRcpt===1?' this year has':'s this year have')+' no receipt attached.','Show them','ledger','norcpt');
+  var hasData=data.transactions.length||data.invoices.length||data.time.length;
+  if(hasData&&(!isDate(s.lastBackup)||daysBetween(s.lastBackup,td)>31)) add('info',isDate(s.lastBackup)?'Your last backup export was on '+s.lastBackup+'.':'You have not exported a backup yet.','Back up now','settings');
+  return L;
+}
+function renderHome(){
+  var td=today(), y=yearOf(td), r=summarize(y), out=0; data.invoices.forEach(function(i){ if(i.status==='sent') out+=invTotal(i); });
+  $('hmTiles').innerHTML=[['Income, '+y,money(r.totalIncome),'Cash received this year'],['Deductible expenses',money(r.deductible),'This year, after limits'],['Net profit (estimate)',money(r.net),'Before personal deductions'],['Outstanding invoices',money(out),'Sent and not yet paid']].map(function(t){ return '<div class="tile"><div class="k">'+t[0]+'</div><div class="v">'+t[1]+'</div><div class="s">'+esc(t[2])+'</div></div>'; }).join('');
+  var L=attention();
+  $('hmList').innerHTML=L.length?L.map(function(a){ return '<div class="att '+a.lvl+'"><span>'+esc(a.text)+'</span><button class="btn small" type="button" data-go="'+a.go+'"'+(a.filter?' data-filter="'+a.filter+'"':'')+'>'+esc(a.btn)+'</button></div>'; }).join(''):'<div class="att ok"><span>Nothing needs attention right now.</span></div>';
+  var all=occurrences(120).filter(function(o){return occStatus(o)!=='done';}), list=all.filter(function(o){ var st=occStatus(o); return st==='overdue'||st==='soon'; });
+  if(list.length<3) list=list.concat(all.filter(function(o){return occStatus(o)==='later';}).slice(0,3-list.length));
+  $('hmCal').tBodies[0].innerHTML=list.length?list.map(function(o){ return occRow(o,false); }).join(''):'<tr><td colspan="5" class="empty">Nothing scheduled in the next four months.</td></tr>';
+}
+function popupHtml(list){
+  return '<div class="bar"><strong>Coming up and overdue</strong><span class="spacer"></span><button class="btn" data-close type="button">Close</button></div>'+
+    '<div class="tablewrap"><table><thead><tr><th>Date</th><th>When</th><th>Item</th><th></th></tr></thead><tbody>'+list.map(function(o){ return '<tr><td class="nowrap">'+esc(o.date)+'</td><td class="nowrap">'+whenText(o)+'</td><td>'+esc(o.title)+'</td><td class="acts"><button class="btn small mut" type="button" data-cdone="'+esc(o.key)+'"'+(locked?' disabled':'')+'>Mark done</button></td></tr>'; }).join('')+'</tbody></table></div>'+
+    '<div class="row" style="margin-top:12px"><button class="btn primary" type="button" data-go="calendar">Open the calendar</button><button class="btn" type="button" id="popSnooze"'+(locked?' disabled':'')+'>Remind me tomorrow</button><span class="hint">Items due within '+remDays()+' days. Change this, or turn the pop-up off, on the Calendar tab.</span></div>';
+}
+function maybePopup(){
+  var key=(note&&note.uuid)||'demo'; if(popShownFor===key||$('app').hidden||!$('overlay').hidden) return; popShownFor=key;
+  if(data.settings.popupOnOpen===false||data.settings.calSnooze===today()) return;
+  var list=dueSoon(); if(!list.length) return;
+  openOverlay(popupHtml(list)); popOpen=true;
+}
+function refreshPopup(){ if(!popOpen||$('overlay').hidden){ popOpen=false; return; } var list=dueSoon(); if(!list.length){ closeOverlay(); popOpen=false; return; } $('ovBox').innerHTML=popupHtml(list); }
+function goTab(t){ var b=document.querySelector('nav.tabs button[data-tab="'+t+'"]'); if(b) b.click(); window.scrollTo(0,0); }
+document.addEventListener('click',function(e){
+  var b=e.target.closest('button,[data-go]'); if(!b) return; var d=b.dataset;
+  if(d.go){ var inOv=!!b.closest('#overlay'); if(inOv){ closeOverlay(); popOpen=false; }
+    if(d.filter==='unrec'){ $('fUnrec').checked=true; $('fNoRcpt').checked=false; }
+    if(d.filter==='norcpt'){ $('fNoRcpt').checked=true; $('fUnrec').checked=false; year=yearOf(today()); }
+    goTab(d.go); return; }
+  if(b.id==='popSnooze'){ if(locked) return; data.settings.calSnooze=today(); closeOverlay(); popOpen=false; commit(); return; }
+  if(locked) return;
+  if(d.cdone){ data.calDone[d.cdone]=today(); commit(); refreshPopup(); }
+  else if(d.cundo){ delete data.calDone[d.cundo]; commit(); }
+  else if(d.remdel){ if(!arm(b,'Delete all dates')) return; data.reminders=data.reminders.filter(function(r){return r.id!==d.remdel;}); Object.keys(data.calDone).forEach(function(k){ if(k.indexOf('c'+d.remdel+'|')===0) delete data.calDone[k]; }); commit(); }
+});
+$('cFormed').addEventListener('change',function(){ if(locked) return; var v=this.value; data.settings.formationDate=isDate(v)?v:''; commit(); });
+$('cDays').addEventListener('change',function(){ if(locked) return; var n=parseInt(this.value,10); if(isNaN(n)||n<0||n>90){ this.value=remDays(); return; } data.settings.remindDays=n; commit(); });
+$('cRetDay').addEventListener('change',function(){ if(locked) return; var n=parseInt(this.value,10); if(isNaN(n)||n<1||n>28){ this.value=Math.min(28,Math.max(1,parseInt(data.settings.retDay,10)||1)); return; } data.settings.retDay=n; commit(); });
+$('cRetFor').addEventListener('change',function(){ if(locked) return; data.settings.retFor=this.value; commit(); });
+$('cPopup').addEventListener('change',function(){ if(locked) return; data.settings.popupOnOpen=this.checked; commit(); });
+$('cShowDone').addEventListener('change',renderCalendar);
+$('calTypes').addEventListener('change',function(e){ var id=e.target.dataset.ctype; if(!id||locked) return; var o=data.settings.calOff, i=o.indexOf(id); if(e.target.checked){ if(i>=0) o.splice(i,1); } else if(i<0) o.push(id); commit(); });
+$('remForm').addEventListener('submit',function(e){
+  e.preventDefault(); if(locked) return;
+  var t=$('rmTitle').value.trim(), d=$('rmDate').value, f=$('rmFreq').value;
+  if(!t){ $('rmErr').textContent='Enter what the reminder is for.'; return; }
+  if(!isDate(d)){ $('rmErr').textContent='Enter the first due date.'; return; }
+  $('rmErr').textContent=''; data.reminders.push({id:uid(), title:t, date:d, freq:f, notes:$('rmNotes').value.trim(), added:today()});
+  $('rmTitle').value=''; $('rmNotes').value=''; $('rmDate').value=''; $('rmFreq').value='yearly'; commit();
+});
+function icsEsc(x){ return String(x||'').replace(/\\/g,'\\\\').replace(/;/g,'\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n'); }
+function icsFold(line){ var out=[], l=line; while(l.length>74){ out.push(l.slice(0,74)); l=' '+l.slice(74); } out.push(l); return out.join('\r\n'); }
+function buildIcs(){
+  var td=today(), days=remDays(), stamp=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d+/,'');
+  var L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//LLC Books//Standard Notes plugin//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH','X-WR-CALNAME:'+icsEsc((data.settings.name||'LLC')+' deadlines')], n=0;
+  occurrences(548).forEach(function(o){ var st=occStatus(o); if(st==='done'||o.date<td) return; n++;
+    L.push('BEGIN:VEVENT','UID:'+o.key.replace(/[^\w.-]+/g,'-')+'@llc-books','DTSTAMP:'+stamp,'DTSTART;VALUE=DATE:'+o.date.replace(/-/g,''),'DTEND;VALUE=DATE:'+addDays(o.date,1).replace(/-/g,''),'SUMMARY:'+icsEsc(o.title),'DESCRIPTION:'+icsEsc(o.detail),'TRANSP:TRANSPARENT');
+    if(days>1) L.push('BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+icsEsc(o.title),'TRIGGER:-P'+(days-1)+'DT15H','END:VALARM');
+    L.push('BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+icsEsc(o.title),'TRIGGER:-PT15H','END:VALARM','END:VEVENT'); });
+  L.push('END:VCALENDAR'); return {text:L.map(icsFold).join('\r\n')+'\r\n', count:n};
+}
+$('icsDl').addEventListener('click',function(){ var r=buildIcs(); download('llc-deadlines-'+today()+'.ics',r.text,'text/calendar'); $('icsMsg').textContent=r.count+' upcoming item'+(r.count===1?'':'s')+' included.'; });
+$('icsShow').addEventListener('click',function(){ var r=buildIcs(), o=$('icsOut'); o.hidden=false; o.value=r.text; o.focus(); o.select(); $('icsMsg').textContent=r.count+' upcoming item'+(r.count===1?'':'s')+'. Paste into a plain text file ending in .ics, then import it.'; });
+
 /* ---------- Tabs ---------- */
 Array.prototype.forEach.call(document.querySelectorAll('nav.tabs button'),function(b){
   b.addEventListener('click',function(){
     Array.prototype.forEach.call(document.querySelectorAll('nav.tabs button'),function(x){ x.setAttribute('aria-selected',x===b?'true':'false'); });
-    ['ledger','invoices','time','reports','mileage','settings'].forEach(function(t){ $('tab-'+t).hidden=(t!==b.dataset.tab); });
+    ['home','ledger','invoices','time','calendar','reports','mileage','settings'].forEach(function(t){ $('tab-'+t).hidden=(t!==b.dataset.tab); });
     render();
   });
 });
@@ -1482,7 +1702,7 @@ standalone=(window.parent===window)||!window.ComponentRelay;
 if(standalone){
   $('modeLabel').textContent='demo mode, outside Standard Notes';
   var saved=null; try{ saved=localStorage.getItem('llc-books-demo'); }catch(e){}
-  loadText(saved||'');
+  loadText(saved||''); setTimeout(maybePopup,400);
 } else {
   setStatus('Connecting to Standard Notes...');
   var Relay=window.ComponentRelay.default||window.ComponentRelay;
@@ -1498,7 +1718,7 @@ if(standalone){
     var wasLocked=locked; locked=!!appData.locked;
     var text=(item.content&&typeof item.content.text==='string')?item.content.text:'';
     if(item.isMetadataUpdate||(prevUuid===item.uuid&&text===lastText)){ if(wasLocked!==locked&&!$('app').hidden) render(); $('locked').hidden=!locked; return; }
-    lastText=text; loadText(text); setStatus('Loaded');
+    lastText=text; loadText(text); setStatus('Loaded'); if(prevUuid!==item.uuid) setTimeout(maybePopup,400);
   });
 }
 })();

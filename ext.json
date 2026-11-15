@@ -3,8 +3,8 @@
   "name": "LLC Books",
   "content_type": "SN|Component",
   "area": "editor-editor",
-  "version": "1.4.0",
-  "description": "Cash-basis books for a single-member LLC: ledger by Schedule C line, bank CSV import, receipts, invoices, time tracking for hourly and retainer clients, recurring entries, reconciliation, estimated tax tracker, mileage, and a year-end package. Data is stored in the note.",
+  "version": "1.5.0",
+  "description": "Cash-basis books for a single-member California LLC: home screen of items needing attention, compliance calendar with reminders and calendar export, ledger by Schedule C line, bank CSV import, receipts, invoices, time tracking for hourly and retainer clients, reconciliation, estimated tax tracker, mileage, and a year-end package. Data is stored in the note.",
   "url": "https://justice2425.github.io/sn-llc-books/index.html",
   "latest_url": "https://justice2425.github.io/sn-llc-books/ext.json"
 }
