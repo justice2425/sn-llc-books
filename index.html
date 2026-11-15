@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LLC Books</title>
 <!--
-  LLC Books 1.2: a cash-basis ledger, invoicing and receipt store for a single-member LLC,
+  LLC Books 1.4: a cash-basis ledger, invoicing and receipt store for a single-member LLC,
   built as a Standard Notes editor plugin. All data, including receipt images, is stored as JSON
   in the text of the note that is open. This page makes no network requests.
   Communication with Standard Notes uses the official component relay (component-relay.js, AGPL-3.0).
@@ -108,6 +108,7 @@ details summary{cursor:pointer;font-weight:600}
 details[open] summary{margin-bottom:10px}
 .sheet.doc{font-size:13px}.sheet.doc h1{font-size:19px;margin:0 0 6px}.sheet.doc h2{color:#111;border-bottom:2px solid #111;padding-bottom:3px}
 .sheet th{background:#eee;color:#333}.sheet td{border-color:#ddd}.sheet tfoot td{background:#f4f4f4}.sheet .hint,.sheet .empty{color:#555}.sheet .tag{color:#555;border-color:#aaa}.sheet .pos,.sheet .neg{color:inherit}
+.clock{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums;padding-top:3px}
 [hidden]{display:none!important}
 #overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 12px;z-index:10}
 #overlay .box{background:var(--bg);border:1px solid var(--line);border-radius:10px;max-width:820px;width:100%;padding:16px}
@@ -153,6 +154,7 @@ details[open] summary{margin-bottom:10px}
   <nav class="tabs" role="tablist" aria-label="Sections">
     <button role="tab" data-tab="ledger" aria-selected="true">Ledger</button>
     <button role="tab" data-tab="invoices" aria-selected="false">Invoices</button>
+    <button role="tab" data-tab="time" aria-selected="false">Time</button>
     <button role="tab" data-tab="reports" aria-selected="false">Reports</button>
     <button role="tab" data-tab="mileage" aria-selected="false">Mileage</button>
     <button role="tab" data-tab="settings" aria-selected="false">Settings and backup</button>
@@ -274,9 +276,63 @@ details[open] summary{margin-bottom:10px}
       <div class="f w6"><label for="clAddr">Billing address</label><input id="clAddr"></div>
       <div class="f w2"><label for="clState">State / country</label><input id="clState" placeholder="CA"></div>
       <div class="f w2"><label for="clTerms">Terms (days)</label><input id="clTerms" inputmode="numeric"></div>
+      <div class="f w2"><label for="clRate">Hourly rate ($)</label><input id="clRate" inputmode="decimal"></div>
+      <div class="f w4"><label for="clBilling">How this client pays</label><select id="clBilling"><option value="hourly">By the hour</option><option value="retainer">Fixed monthly retainer</option></select></div>
+      <div class="f w4"><label for="clRet">Monthly retainer ($)</label><input id="clRet" inputmode="decimal"></div>
+      <div class="f w4"><label for="clExp">Expected hours per month (optional)</label><input id="clExp" inputmode="decimal"></div>
       <div class="actions"><button class="btn primary" type="submit" id="clSave">Add client</button><button class="btn" type="button" id="clCancel" hidden>Cancel edit</button><span class="hint">The state feeds the "Income by client location" report, which helps your CPA with out-of-state work.</span><span class="hint neg" id="clErr" role="alert"></span></div>
     </form>
-    <div class="tablewrap" style="margin-top:10px"><table id="clTable"><thead><tr><th>Client</th><th>Contact</th><th>State</th><th>Terms</th><th class="noprint"></th></tr></thead><tbody></tbody></table></div>
+    <div class="tablewrap" style="margin-top:10px"><table id="clTable"><thead><tr><th>Client</th><th>Contact</th><th>State</th><th>Terms / rate</th><th class="noprint"></th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <!-- TIME -->
+  <section id="tab-time" role="tabpanel" hidden>
+    <div class="tiles" id="tmTiles"></div>
+    <h2>Timer</h2>
+    <form class="entry" id="tmrForm" autocomplete="off">
+      <div class="f w4"><label for="tmrClient">Client</label><select id="tmrClient"></select></div>
+      <div class="f w4"><label for="tmrDesc">What you are working on</label><input id="tmrDesc"></div>
+      <div class="f w2"><label for="tmrTag">Project / tag</label><input id="tmrTag" list="tagList"></div>
+      <div class="f w2"><label>Elapsed</label><div class="clock" id="tmrClock" aria-live="off">0:00:00</div></div>
+      <div class="actions">
+        <button class="btn primary" type="submit" id="tmrStart">Start timer</button>
+        <button class="btn primary" type="button" id="tmrStop" hidden>Stop and save</button>
+        <button class="btn danger" type="button" id="tmrCancel" hidden>Discard</button>
+        <span class="hint" id="tmrHint"></span>
+      </div>
+    </form>
+
+    <h2 id="tmFormTitle">Add time by hand</h2>
+    <form class="entry" id="tmForm" autocomplete="off">
+      <input type="hidden" id="tmId">
+      <div class="f w2"><label for="tmDate">Date</label><input type="date" id="tmDate" required></div>
+      <div class="f w4"><label for="tmClient">Client</label><select id="tmClient"></select></div>
+      <div class="f w2"><label for="tmHours">Hours</label><input id="tmHours" inputmode="decimal" placeholder="1.50" required></div>
+      <div class="f w2"><label for="tmRate">Rate ($/hour)</label><input id="tmRate" inputmode="decimal" placeholder="client rate"></div>
+      <div class="f w2"><label for="tmTag">Project / tag</label><input id="tmTag" list="tagList"></div>
+      <div class="f w6"><label for="tmDesc">Description</label><input id="tmDesc"></div>
+      <div class="f w6" style="align-self:end"><label class="inline"><input type="checkbox" id="tmBill" checked> Billable to the client</label></div>
+      <div class="actions"><button class="btn primary" type="submit" id="tmSave">Add time</button><button class="btn" type="button" id="tmCancel" hidden>Cancel edit</button><span class="hint">Leave the rate blank to use the client's hourly rate. Time with no client is recorded as internal and not billable.</span><span class="hint neg" id="tmErr" role="alert"></span></div>
+    </form>
+
+    <div class="filters noprint">
+      <div><label for="tmfClient">Client</label><select id="tmfClient"></select></div>
+      <div><label for="tmfStatus">Status</label><select id="tmfStatus"><option value="">All</option><option value="un">Unbilled</option><option value="ret">Retainer, not yet invoiced</option><option value="inv">Invoiced</option><option value="nb">Not billable</option></select></div>
+    </div>
+    <div class="tablewrap"><table id="tmTable"><thead><tr><th>Date</th><th>Client</th><th>Description</th><th>Tag</th><th class="num">Hours</th><th class="num">Rate</th><th class="num">Amount</th><th>Status</th><th class="noprint"></th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>
+    <p class="hint">Hourly time that has been invoiced is locked; to change it, delete or void its invoice first, which returns the time to unbilled. Retainer time stays editable, because changing hours does not change the fixed fee.</p>
+
+    <h2>Bill unbilled time</h2>
+    <form class="entry" id="tbForm" autocomplete="off">
+      <div class="f w4"><label for="tbClient">Client</label><select id="tbClient"></select></div>
+      <div class="f w2" id="tbThruW"><label for="tbThru">Time through</label><input type="date" id="tbThru"></div>
+      <div class="f w6" id="tbGroupW"><label for="tbGroup">Invoice lines</label><select id="tbGroup"><option value="project">One line per project / tag</option><option value="entry">One line per time entry</option><option value="single">One summary line</option></select></div>
+      <div class="f w2" id="tbMonthW" hidden><label for="tbMonth">Retainer month</label><input type="month" id="tbMonth" placeholder="2027-01"></div>
+      <div class="f w6" id="tbHoursW" hidden style="align-self:end"><label class="inline"><input type="checkbox" id="tbShowHours" checked> Show hours worked on the invoice</label></div>
+      <div class="actions"><button class="btn primary" type="submit">Create draft invoice</button><span class="hint" id="tbInfo"></span><span class="hint neg" id="tbErr" role="alert"></span></div>
+    </form>
+    <div class="row noprint" style="margin-top:14px"><button class="btn" type="button" id="tmCsvDl">Export time as CSV</button><button class="btn" type="button" id="tmCsvShow">Show time CSV to copy</button></div>
+    <textarea id="tmOut" class="code" readonly hidden aria-label="Time export" style="margin-top:10px"></textarea>
   </section>
 
   <!-- REPORTS -->
@@ -293,6 +349,14 @@ details[open] summary{margin-bottom:10px}
       <div><h2>Income by client location</h2><div class="tablewrap"><table id="stateTable"><thead><tr><th>State / country</th><th class="num">Received</th></tr></thead><tbody></tbody></table></div><p class="hint">Based on the state saved for each client on the Invoices tab.</p></div>
       <div><h2>Contract labor by payee</h2><div class="tablewrap"><table id="contractorTable"><thead><tr><th>Payee</th><th class="num">Paid</th><th></th></tr></thead><tbody></tbody></table></div><p class="hint" id="contractorHint"></p></div>
       <div><h2>By project / tag</h2><div class="tablewrap"><table id="tagTable"><thead><tr><th>Tag</th><th class="num">Income</th><th class="num">Expenses</th></tr></thead><tbody></tbody></table></div></div>
+    </div>
+    <h2>Time by client</h2>
+    <div class="tablewrap"><table id="tmRepTable"><thead><tr><th>Client</th><th class="num">Hours</th><th class="num">Share of hours</th><th class="num">Billable hours</th><th class="num">Invoiced</th><th class="num">Unbilled</th></tr></thead><tbody></tbody></table></div>
+    <p class="hint">From the Time tab. The share of hours per client is a useful record if you ever need to show that no single client controls your schedule.</p>
+    <div id="retWrap" hidden>
+    <h2>Retainer clients by month</h2>
+    <div class="tablewrap"><table id="retTable"><thead><tr><th>Month</th><th>Client</th><th class="num">Fee</th><th class="num">Hours</th><th class="num">Effective $ / hour</th><th>Invoice</th></tr></thead><tbody></tbody></table></div>
+    <p class="hint">Effective rate is the month's fee divided by billable hours logged for that client. It is a useful figure to keep, for example when a client's board needs to show that a fixed fee is reasonable for the work.</p>
     </div>
     <h2>Estimated tax tracker</h2>
     <div class="grid2">
@@ -342,6 +406,7 @@ details[open] summary{margin-bottom:10px}
       <div><label for="sNext">Next invoice number</label><input id="sNext" class="set" inputmode="numeric"></div>
       <div><label for="sTerms">Default payment terms (days)</label><input id="sTerms" class="set" inputmode="numeric"></div>
       <div><label for="sFooter">Payment instructions (printed at the bottom of every invoice)</label><input id="sFooter" class="set" placeholder="Pay by ACH to ... or check payable to ..."></div>
+      <div><label for="sRound">Round timer entries to the nearest (minutes)</label><input id="sRound" class="set" inputmode="numeric"></div>
     </div>
 
     <h2>Categories</h2>
@@ -438,7 +503,7 @@ var RCPT_MAX=350*1024, STORE_WARN=4*1024*1024;
 
 /* ---------- State ---------- */
 function blank(){
-  return {llcBooks:1, settings:{name:'', email:'', address:'', reservePct:'', mileRate:'', mealsPct:50, necThreshold:2000, feeThreshold:250000, invPrefix:'INV-', invNext:1001, invTerms:30, invFooter:'', customCats:[], hiddenCats:[], estTargets:{}}, transactions:[], mileage:[], clients:[], invoices:[], receipts:{}, recurring:[]};
+  return {llcBooks:1, settings:{name:'', email:'', address:'', reservePct:'', mileRate:'', mealsPct:50, necThreshold:2000, feeThreshold:250000, invPrefix:'INV-', invNext:1001, invTerms:30, invFooter:'', customCats:[], hiddenCats:[], estTargets:{}, timeRound:6}, transactions:[], mileage:[], clients:[], invoices:[], receipts:{}, recurring:[], time:[], timer:null};
 }
 var data = blank();
 var note = null, relay = null, locked = false, lastText = null, standalone = false, foreignText = null;
@@ -511,13 +576,17 @@ function normalize(obj){
   if(Array.isArray(obj.mileage)) d.mileage=obj.mileage.filter(function(m){ return m&&isDate(str(m.date).slice(0,10))&&isFinite(m.miles); })
     .map(function(m){ return {id:m.id||uid(), date:str(m.date).slice(0,10), miles:+m.miles, dest:str(m.dest), purpose:str(m.purpose)}; });
   if(Array.isArray(obj.clients)) d.clients=obj.clients.filter(function(c){ return c&&c.name; })
-    .map(function(c){ return {id:c.id||uid(), name:str(c.name), contact:str(c.contact), email:str(c.email), address:str(c.address), state:str(c.state), terms:str(c.terms)}; });
+    .map(function(c){ return {id:c.id||uid(), name:str(c.name), contact:str(c.contact), email:str(c.email), address:str(c.address), state:str(c.state), terms:str(c.terms), rate:(isFinite(+c.rate)&&+c.rate>0)?Math.round(+c.rate):'', billing:c.billing==='retainer'?'retainer':'hourly', retainer:(isFinite(+c.retainer)&&+c.retainer>0)?Math.round(+c.retainer):'', expHours:(isFinite(+c.expHours)&&+c.expHours>0)?+c.expHours:''}; });
   if(Array.isArray(obj.invoices)) d.invoices=obj.invoices.filter(function(i){ return i&&i.number&&isDate(i.date); })
-    .map(function(i){ return {id:i.id||uid(), number:str(i.number), date:i.date, due:isDate(i.due)?i.due:i.date, clientId:str(i.clientId), clientName:str(i.clientName), tag:str(i.tag), notes:str(i.notes),
+    .map(function(i){ return {id:i.id||uid(), number:str(i.number), date:i.date, due:isDate(i.due)?i.due:i.date, clientId:str(i.clientId), clientName:str(i.clientName), retainerMonth:/^\d{4}-\d{2}$/.test(str(i.retainerMonth))?str(i.retainerMonth):'', tag:str(i.tag), notes:str(i.notes),
       status:['draft','sent','paid','void'].indexOf(i.status)>=0?i.status:'draft', paidDate:isDate(i.paidDate)?i.paidDate:'', txId:str(i.txId),
       items:(Array.isArray(i.items)?i.items:[]).map(function(x){ return {desc:str(x.desc), qty:isFinite(+x.qty)?+x.qty:1, rate:Math.round(+x.rate)||0}; })}; });
   if(Array.isArray(obj.recurring)) d.recurring=obj.recurring.filter(function(r){ return r&&r.cat&&isFinite(r.cents)&&isDate(r.next)&&{monthly:1,quarterly:1,yearly:1}[r.freq]; })
     .map(function(r){ ensureCat(str(r.cat),r.type); return {id:r.id||uid(), cat:str(r.cat), type:CAT_INDEX[r.cat].type, cents:Math.abs(Math.round(r.cents)), party:str(r.party), memo:str(r.memo), tag:str(r.tag), acct:str(r.acct), freq:r.freq, day:Math.min(31,Math.max(1,parseInt(r.day,10)||+r.next.slice(8,10))), next:r.next, active:r.active!==false}; });
+  if(Array.isArray(obj.time)) d.time=obj.time.filter(function(e){ return e&&isDate(str(e.date).slice(0,10))&&isFinite(+e.hours)&&+e.hours>0; })
+    .map(function(e){ return {id:e.id||uid(), date:str(e.date).slice(0,10), clientId:str(e.clientId), clientName:str(e.clientName), hours:Math.round(+e.hours*100)/100, desc:str(e.desc), tag:str(e.tag), rate:(isFinite(+e.rate)&&+e.rate>0)?Math.round(+e.rate):0, billable:e.billable!==false, invoiceId:str(e.invoiceId)}; });
+  var invIds={}; d.invoices.forEach(function(i){ invIds[i.id]=1; }); d.time.forEach(function(e){ if(e.invoiceId&&!invIds[e.invoiceId]) e.invoiceId=''; });
+  if(obj.timer&&typeof obj.timer==='object'&&isFinite(+obj.timer.start)&&+obj.timer.start>0) d.timer={start:+obj.timer.start, clientId:str(obj.timer.clientId), desc:str(obj.timer.desc), tag:str(obj.timer.tag)};
   /* drop receipts nothing points to */
   var used={}; d.transactions.forEach(function(t){ if(t.receiptId) used[t.receiptId]=1; });
   Object.keys(d.receipts).forEach(function(id){ if(!used[id]) delete d.receipts[id]; });
@@ -570,7 +639,7 @@ function summarize(y){
 /* ---------- Rendering ---------- */
 function years(){
   var set={}; set[new Date().getFullYear()]=1; set[year]=1;
-  data.transactions.concat(data.mileage,data.invoices).forEach(function(t){ var y=yearOf(t.date); if(y>1990&&y<2200) set[y]=1; });
+  data.transactions.concat(data.mileage,data.invoices,data.time).forEach(function(t){ var y=yearOf(t.date); if(y>1990&&y<2200) set[y]=1; });
   return Object.keys(set).map(Number).sort(function(a,b){return b-a;});
 }
 function catLabel(c){ return c.label+(c.line?' (line '+c.line+')':''); }
@@ -644,7 +713,7 @@ function renderInvoices(){
     return '<tr><td class="nowrap">'+esc(i.number)+'</td><td class="nowrap">'+esc(i.date)+'</td><td>'+esc(invClientName(i))+'</td><td class="nowrap">'+esc(i.due)+'</td><td>'+lab+'</td><td class="num">'+money(invTotal(i))+'</td><td class="acts noprint">'+a+'</td></tr>';
   }).join(''):'<tr><td colspan="7" class="empty">No invoices yet.</td></tr>';
   $('clTable').tBodies[0].innerHTML=data.clients.length?data.clients.slice().sort(function(a,b){return a.name.localeCompare(b.name);}).map(function(c){
-    return '<tr><td>'+esc(c.name)+'<div class="hint">'+esc(c.address)+'</div></td><td>'+esc(c.contact)+(c.email?'<div class="hint">'+esc(c.email)+'</div>':'')+'</td><td>'+esc(c.state)+'</td><td>'+esc(c.terms)+'</td><td class="acts noprint"><button class="btn small mut" data-cedit="'+esc(c.id)+'">Edit</button> <button class="btn small danger mut" data-cdel="'+esc(c.id)+'">Delete</button></td></tr>';
+    return '<tr><td>'+esc(c.name)+'<div class="hint">'+esc(c.address)+'</div></td><td>'+esc(c.contact)+(c.email?'<div class="hint">'+esc(c.email)+'</div>':'')+'</td><td>'+esc(c.state)+'</td><td>'+esc(c.terms)+(c.terms!==''?' days':'')+(c.billing==='retainer'?(c.terms!==''?', ':'')+'retainer '+money(c.retainer||0)+'/mo'+(c.expHours?' ('+c.expHours+' h expected)':''):(c.rate?(c.terms!==''?', ':'')+money(c.rate)+'/hr':''))+'</td><td class="acts noprint"><button class="btn small mut" data-cedit="'+esc(c.id)+'">Edit</button> <button class="btn small danger mut" data-cdel="'+esc(c.id)+'">Delete</button></td></tr>';
   }).join(''):'<tr><td colspan="5" class="empty">No clients yet. Add one to start invoicing.</td></tr>';
 }
 
@@ -697,6 +766,7 @@ function renderReports(){
   CATS.equity.forEach(function(c){ var a=r.eq[c.id]||0; if(!a&&c.id!=='contrib'&&c.id!=='draw') return; eqNet+=c.sign*a; eqHtml+='<tr><td>'+esc(c.label)+'</td><td class="num">'+money(c.sign*a)+'</td></tr>'; });
   eqHtml+='<tr><td><strong>Net owner activity for '+year+'</strong></td><td class="num"><strong>'+money(eqNet)+'</strong></td></tr>';
   $('eqTable').tBodies[0].innerHTML=eqHtml;
+  renderTimeReport();
   renderEst();
 }
 
@@ -709,7 +779,7 @@ function renderMileage(){
   $('miHint').textContent=isNaN(rate)||!rate?'No mileage rate is set. Enter the IRS standard mileage rate for '+year+' in Settings to see the deduction in Reports.':'At $'+rate+' per mile this is '+money(Math.round(tot*rate*100))+', included in Reports on line 9.';
 }
 
-var SET=[['sName','name',0],['sEmail','email',0],['sAddr','address',0],['sReserve','reservePct',1],['sMile','mileRate',1],['sMeals','mealsPct',1],['sNec','necThreshold',1],['sFee','feeThreshold',1],['sPrefix','invPrefix',0],['sNext','invNext',1],['sTerms','invTerms',1],['sFooter','invFooter',0]];
+var SET=[['sName','name',0],['sEmail','email',0],['sAddr','address',0],['sReserve','reservePct',1],['sMile','mileRate',1],['sMeals','mealsPct',1],['sNec','necThreshold',1],['sFee','feeThreshold',1],['sPrefix','invPrefix',0],['sNext','invNext',1],['sTerms','invTerms',1],['sFooter','invFooter',0],['sRound','timeRound',1]];
 function fillLineSelect(){ $('ncLine').innerHTML=LINES[$('ncType').value].map(function(l){ return '<option value="'+l[0]+'">'+esc(l[1])+'</option>'; }).join(''); if($('ncType').value==='expense') $('ncLine').value='27a'; }
 function renderSettings(){
   var s=data.settings, a=document.activeElement&&document.activeElement.id;
@@ -730,8 +800,9 @@ function render(){
   $('bizName').textContent=data.settings.name||'LLC Books';
   var ys=years(), sel=$('year'); sel.innerHTML=ys.map(function(y){return '<option'+(y===year?' selected':'')+'>'+y+'</option>';}).join('');
   $('locked').hidden=!locked;
-  renderLedger(); renderInvoices(); renderReports(); renderMileage(); renderSettings();
+  renderLedger(); renderInvoices(); renderTime(); renderReports(); renderMileage(); renderSettings();
   Array.prototype.forEach.call(document.querySelectorAll('#app form input,#app form select,#app form textarea,#app form button,#app .set,#app .mut,#impBtn,#impBox,#impFile'),function(el){ el.disabled=locked; });
+  syncRateField();
 }
 
 /* ---------- Persistence ---------- */
@@ -744,7 +815,7 @@ function persist(){
   var r=summarize(year);
   relay.saveItemWithPresave(note,function(){
     note.content.text=text;
-    note.content.preview_plain=(data.settings.name||'LLC Books')+': '+data.transactions.length+' entries, '+data.invoices.length+' invoices. '+r.y+' net '+money(r.net);
+    note.content.preview_plain=(data.settings.name||'LLC Books')+(data.timer?' [timer running]':'')+': '+data.transactions.length+' entries, '+data.invoices.length+' invoices. '+r.y+' net '+money(r.net);
     note.content.preview_html=null;
   },function(){ setStatus('Saved '+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})); });
 }
@@ -760,7 +831,7 @@ function loadText(text){
   if(obj&&obj.llcBooks){ data=normalize(obj); pickYear(); showApp(true); }
   else { foreignText=text; showApp(false); }
 }
-function showApp(ok){ $('app').hidden=!ok; $('foreign').hidden=ok; if(ok){ resetForm(); resetInv(); render(); } }
+function showApp(ok){ $('app').hidden=!ok; $('foreign').hidden=ok; if(ok){ resetForm(); resetInv(); render(); resetTm(); syncTimer(); } }
 
 /* ---------- Overlay ---------- */
 function openOverlay(html){ $('ovBox').innerHTML=html; $('overlay').hidden=false; var b=$('ovBox').querySelector('button'); if(b) b.focus(); }
@@ -908,7 +979,7 @@ $('invForm').addEventListener('submit',function(e){
   if(data.invoices.some(function(i){ return i.number===no&&i.id!==id; })){ $('invErr').textContent='Invoice number '+no+' is already used.'; return; }
   var due=isDate($('invDue').value)?$('invDue').value:date;
   var old=data.invoices.find(function(i){return i.id===id;});
-  var inv={id:id||uid(), number:no, date:date, due:due, clientId:c.id, clientName:c.name, tag:$('invTag').value.trim(), notes:$('invNotes').value.trim(), status:old?old.status:'draft', paidDate:old?old.paidDate:'', txId:old?old.txId:'', items:items};
+  var inv={id:id||uid(), number:no, date:date, due:due, clientId:c.id, clientName:c.name, tag:$('invTag').value.trim(), notes:$('invNotes').value.trim(), status:old?old.status:'draft', paidDate:old?old.paidDate:'', txId:old?old.txId:'', retainerMonth:old?(old.retainerMonth||''):'', items:items};
   if(old) data.invoices[data.invoices.indexOf(old)]=inv; else { data.invoices.push(inv); if(no===str(data.settings.invPrefix)+str(data.settings.invNext)){ var n=parseInt(data.settings.invNext,10); if(!isNaN(n)) data.settings.invNext=n+1; } }
   delete $('invDue').dataset.touched; resetInv(); commit(); viewInvoice(inv.id);
 });
@@ -967,15 +1038,18 @@ $('invTable').addEventListener('click',function(e){
   } else if(d.isent){ inv=find(d.isent); if(inv){ inv.status='sent'; commit(); } }
   else if(d.idraft){ inv=find(d.idraft); if(inv){ inv.status='draft'; commit(); } }
   else if(d.ipay){ payDialog(d.ipay); }
-  else if(d.ivoid){ if(!arm(b,'Confirm void')) return; inv=find(d.ivoid); if(inv){ inv.status='void'; commit(); } }
-  else if(d.idel){ if(!arm(b,'Confirm delete')) return; data.invoices=data.invoices.filter(function(i){return i.id!==d.idel;}); if($('invId').value===d.idel) resetInv(); commit(); }
+  else if(d.ivoid){ if(!arm(b,'Confirm void')) return; inv=find(d.ivoid); if(inv){ inv.status='void'; releaseTime(inv.id); commit(); } }
+  else if(d.idel){ if(!arm(b,'Confirm delete')) return; releaseTime(d.idel); data.invoices=data.invoices.filter(function(i){return i.id!==d.idel;}); if($('invId').value===d.idel) resetInv(); commit(); }
 });
-function resetClient(){ ['clId','clName','clContact','clEmail','clAddr','clState','clTerms'].forEach(function(i){ $(i).value=''; }); $('clSave').textContent='Add client'; $('clCancel').hidden=true; $('clErr').textContent=''; }
+function resetClient(){ ['clId','clName','clContact','clEmail','clAddr','clState','clTerms','clRate','clRet','clExp'].forEach(function(i){ $(i).value=''; }); $('clBilling').value='hourly'; $('clSave').textContent='Add client'; $('clCancel').hidden=true; $('clErr').textContent=''; }
 $('clForm').addEventListener('submit',function(e){
   e.preventDefault(); if(locked) return;
   var name=$('clName').value.trim(), id=$('clId').value; if(!name){ $('clErr').textContent='Enter the client name.'; return; }
+  var bill=$('clBilling').value, ret=rateOf($('clRet').value), exp=num($('clExp').value);
+  if(bill==='retainer'&&!ret){ $('clErr').textContent='Enter the monthly retainer amount.'; return; }
+  if($('clExp').value.trim()&&(isNaN(exp)||exp<=0)){ $('clErr').textContent='Expected hours must be a positive number.'; return; }
   if(data.clients.some(function(c){ return c.name.toLowerCase()===name.toLowerCase()&&c.id!==id; })){ $('clErr').textContent='A client with that name already exists.'; return; }
-  var c={id:id||uid(), name:name, contact:$('clContact').value.trim(), email:$('clEmail').value.trim(), address:$('clAddr').value.trim(), state:$('clState').value.trim().toUpperCase(), terms:$('clTerms').value.trim()};
+  var c={id:id||uid(), name:name, contact:$('clContact').value.trim(), email:$('clEmail').value.trim(), address:$('clAddr').value.trim(), state:$('clState').value.trim().toUpperCase(), terms:$('clTerms').value.trim(), rate:rateOf($('clRate').value), billing:bill, retainer:ret, expHours:$('clExp').value.trim()?exp:''};
   var old=clientById(id);
   if(old){ if(old.name!==name) data.transactions.forEach(function(t){ if(t.party===old.name&&t.invoiceId) t.party=name; }); data.clients[data.clients.indexOf(old)]=c; data.invoices.forEach(function(i){ if(i.clientId===c.id) i.clientName=name; }); }
   else data.clients.push(c);
@@ -984,9 +1058,9 @@ $('clForm').addEventListener('submit',function(e){
 $('clCancel').addEventListener('click',resetClient);
 $('clTable').addEventListener('click',function(e){
   var b=e.target.closest('button'); if(!b||locked) return;
-  if(b.dataset.cedit){ var c=clientById(b.dataset.cedit); if(!c) return; $('clId').value=c.id; $('clName').value=c.name; $('clContact').value=c.contact; $('clEmail').value=c.email; $('clAddr').value=c.address; $('clState').value=c.state; $('clTerms').value=c.terms; $('clSave').textContent='Save client'; $('clCancel').hidden=false; $('clName').focus(); }
+  if(b.dataset.cedit){ var c=clientById(b.dataset.cedit); if(!c) return; $('clId').value=c.id; $('clName').value=c.name; $('clContact').value=c.contact; $('clEmail').value=c.email; $('clAddr').value=c.address; $('clState').value=c.state; $('clTerms').value=c.terms; $('clRate').value=c.rate?(c.rate/100).toFixed(2):''; $('clBilling').value=c.billing||'hourly'; $('clRet').value=c.retainer?(c.retainer/100).toFixed(2):''; $('clExp').value=c.expHours||''; $('clSave').textContent='Save client'; $('clCancel').hidden=false; $('clName').focus(); }
   else if(b.dataset.cdel){
-    if(data.invoices.some(function(i){return i.clientId===b.dataset.cdel;})){ b.textContent='Has invoices; cannot delete'; b.disabled=true; return; }
+    if(data.invoices.some(function(i){return i.clientId===b.dataset.cdel;})||data.time.some(function(e){return e.clientId===b.dataset.cdel;})){ b.textContent='Has invoices or time; cannot delete'; b.disabled=true; return; }
     if(!arm(b,'Confirm delete')) return; data.clients=data.clients.filter(function(c){return c.id!==b.dataset.cdel;}); commit();
   }
 });
@@ -1221,7 +1295,7 @@ function pkgBody(withImgs){
   var mi=data.mileage.filter(function(m){return yearOf(m.date)===y;}).sort(function(a,b){return a.date<b.date?-1:1;});
   var h='<h1>'+esc(s.name||'LLC Books')+': year-end package for '+y+'</h1><p>Prepared '+today()+' from the owner\'s LLC Books ledger. Cash basis. These are the owner\'s records, not reviewed figures; Schedule C line numbers should be checked against the current form.</p>';
   h+='<h2>Summary</h2><table><tbody><tr><td>Gross receipts less returns</td><td class="num">'+money(r.gross-r.returns)+'</td></tr><tr><td>Other income</td><td class="num">'+money(r.otherInc)+'</td></tr><tr><td>Deductible expenses (after meals limit'+(r.mileDeduction?' and standard mileage':'')+')</td><td class="num">'+money(r.deductible)+'</td></tr><tr><td><strong>Net profit before home office deduction</strong></td><td class="num"><strong>'+money(r.net)+'</strong></td></tr><tr><td>Business miles logged</td><td class="num">'+r.miles.toFixed(1)+'</td></tr><tr><td>Expenses without a receipt on file</td><td class="num">'+r.noRcpt+'</td></tr></tbody></table>';
-  h+='<h2>Profit and loss by Schedule C line</h2>'+T('plTable')+'<h2>By calendar quarter</h2>'+T('qTable')+'<h2>Estimated tax payments</h2>'+T('etTable')+'<h2>Owner account</h2>'+T('eqTable')+'<h2>Income by payer</h2>'+T('payerTable')+'<h2>Income by client location</h2>'+T('stateTable')+'<h2>Contract labor by payee (possible Forms 1099-NEC)</h2>'+T('contractorTable')+'<h2>By project / tag</h2>'+T('tagTable')+'<h2>Unpaid invoices as of '+today()+'</h2>'+T('arTable');
+  h+='<h2>Profit and loss by Schedule C line</h2>'+T('plTable')+'<h2>By calendar quarter</h2>'+T('qTable')+'<h2>Estimated tax payments</h2>'+T('etTable')+'<h2>Owner account</h2>'+T('eqTable')+'<h2>Income by payer</h2>'+T('payerTable')+'<h2>Income by client location</h2>'+T('stateTable')+'<h2>Contract labor by payee (possible Forms 1099-NEC)</h2>'+T('contractorTable')+'<h2>By project / tag</h2>'+T('tagTable')+'<h2>Time by client</h2>'+T('tmRepTable')+($('retWrap').hidden?'':'<h2>Retainer clients by month</h2>'+T('retTable'))+'<h2>Unpaid invoices as of '+today()+'</h2>'+T('arTable');
   h+='<h2>Mileage log</h2><table><thead><tr><th>Date</th><th>From / to</th><th>Purpose</th><th class="num">Miles</th></tr></thead><tbody>'+(mi.length?mi.map(function(m){ return '<tr><td>'+esc(m.date)+'</td><td>'+esc(m.dest)+'</td><td>'+esc(m.purpose)+'</td><td class="num">'+m.miles.toFixed(1)+'</td></tr>'; }).join('')+'<tr><td colspan="3"><strong>Total</strong></td><td class="num"><strong>'+r.miles.toFixed(1)+'</strong></td></tr>':'<tr><td colspan="4" class="empty">No trips logged.</td></tr>')+'</tbody></table>';
   h+='<h2>All ledger entries</h2><table><thead><tr><th>Date</th><th>Category</th><th>Line</th><th>Payee / payer</th><th>Description</th><th>Tag</th><th>Ref</th><th>Via</th><th>Rcpt</th><th>Rec.</th><th class="num">Amount</th></tr></thead><tbody>'+(tx.length?tx.map(function(t){ var c=CAT_INDEX[t.cat]; return '<tr><td style="white-space:nowrap">'+esc(t.date)+'</td><td>'+esc(c.label)+'</td><td>'+esc(c.line||'')+'</td><td>'+esc(t.party)+'</td><td>'+esc(t.memo)+'</td><td>'+esc(t.tag)+'</td><td>'+esc(t.ref)+'</td><td>'+esc(t.acct)+'</td><td>'+(t.receiptId?'yes':'')+'</td><td>'+(t.rec?'yes':'')+'</td><td class="num">'+money(signed(t))+'</td></tr>'; }).join(''):'<tr><td colspan="11" class="empty">No entries.</td></tr>')+'</tbody></table>';
   if(withImgs){
@@ -1241,11 +1315,161 @@ function viewPackage(){
 }
 $('pkgBtn').addEventListener('click',viewPackage);
 
+/* ---------- Time tracking ---------- */
+function rateOf(v){ v=String(v||'').trim(); if(!v) return ''; var c=toCents(v); return (isNaN(c)||c<=0)?'':c; }
+function fmtH(h){ return (Math.round(h*100)/100).toFixed(2); }
+function localDate(ms){ var d=new Date(ms); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function tmClientName(e){ var c=clientById(e.clientId); return c?c.name:(e.clientName||(e.clientId?'(client removed)':'No client')); }
+function isRet(cid){ var c=clientById(cid); return !!(c&&c.billing==='retainer'); }
+function retInvoiceFor(cid,mo){ return data.invoices.find(function(i){ return i.clientId===cid&&i.retainerMonth===mo&&i.status!=='void'; })||null; }
+function monthName(mo){ var p=mo.split('-'); return new Date(Date.UTC(+p[0],+p[1]-1,1)).toLocaleString('en-US',{month:'long',year:'numeric',timeZone:'UTC'}); }
+function tmInvoice(e){ if(e.invoiceId) return data.invoices.find(function(i){return i.id===e.invoiceId;})||null; return (e.billable&&isRet(e.clientId))?retInvoiceFor(e.clientId,e.date.slice(0,7)):null; }
+function tmStatus(e){ return tmInvoice(e)?'inv':(e.billable&&e.clientId?(isRet(e.clientId)?'ret':'un'):'nb'); }
+function retHours(cid,mo){ var h=0; data.time.forEach(function(e){ if(e.clientId===cid&&e.billable&&e.date.slice(0,7)===mo) h+=e.hours; }); return h; }
+function syncRateField(){ var c=clientById($('tmClient').value), r=!!(c&&c.billing==='retainer'); $('tmRate').disabled=locked||r; $('tmRate').placeholder=r?'covered by retainer':'client rate'; if(r) $('tmRate').value=''; }
+function renderRetainers(){
+  var rows=[], seen={};
+  data.invoices.forEach(function(i){ if(i.retainerMonth&&i.status!=='void'&&yearOf(i.retainerMonth)===year){ var k=i.clientId+'|'+i.retainerMonth; seen[k]=1; rows.push({cid:i.clientId,name:invClientName(i),mo:i.retainerMonth,fee:invTotal(i),inv:i}); } });
+  data.time.forEach(function(e){ if(!e.billable||!isRet(e.clientId)||yearOf(e.date)!==year) return; var mo=e.date.slice(0,7), k=e.clientId+'|'+mo; if(seen[k]) return; seen[k]=1; var c=clientById(e.clientId); rows.push({cid:c.id,name:c.name,mo:mo,fee:c.retainer||0,inv:null}); });
+  $('retWrap').hidden=!rows.length&&!data.clients.some(function(c){return c.billing==='retainer';});
+  rows.sort(function(a,b){ return a.mo<b.mo?1:(a.mo>b.mo?-1:a.name.localeCompare(b.name)); });
+  $('retTable').tBodies[0].innerHTML=rows.length?rows.map(function(r){ var h=retHours(r.cid,r.mo), c=clientById(r.cid), exp=c&&c.expHours;
+    return '<tr><td class="nowrap">'+esc(monthName(r.mo))+'</td><td>'+esc(r.name)+'</td><td class="num">'+money(r.fee)+'</td><td class="num">'+fmtH(h)+(exp?' <span class="hint">of '+exp+'</span>':'')+'</td><td class="num">'+(h?money(Math.round(r.fee/h)):'')+'</td><td>'+(r.inv?esc(r.inv.number)+' <span class="tag'+(r.inv.status==='paid'?' good':'')+'">'+esc(r.inv.status)+'</span>':'<span class="tag warn">Not invoiced</span>')+'</td></tr>'; }).join(''):'<tr><td colspan="6" class="empty">No retainer months in '+year+' yet.</td></tr>';
+}
+function releaseTime(invId){ data.time.forEach(function(e){ if(e.invoiceId===invId) e.invoiceId=''; }); }
+function fillClients(id,first){ var s=$(id), prev=s.value; s.innerHTML='<option value="">'+esc(first)+'</option>'+data.clients.slice().sort(function(a,b){return a.name.localeCompare(b.name);}).map(function(c){ return '<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>'; }).join(''); if(prev&&clientById(prev)) s.value=prev; }
+function unbilledFor(cid,thru){ return data.time.filter(function(e){ return e.clientId===cid&&tmStatus(e)==='un'&&(!thru||e.date<=thru); }).sort(function(a,b){return a.date<b.date?-1:1;}); }
+function updateBillInfo(){
+  var rc=clientById($('tbClient').value), isR=!!(rc&&rc.billing==='retainer');
+  $('tbThruW').hidden=isR; $('tbGroupW').hidden=isR; $('tbMonthW').hidden=!isR; $('tbHoursW').hidden=!isR;
+  if(!$('tbMonth').value) $('tbMonth').value=today().slice(0,7);
+  if(isR){ var mo=$('tbMonth').value, ok=/^\d{4}-\d{2}$/.test(mo), ex=ok&&retInvoiceFor(rc.id,mo);
+    $('tbInfo').textContent=!ok?'Enter the month as YYYY-MM.':(ex?monthName(mo)+' is already invoiced as '+ex.number+'.':'Retainer '+money(rc.retainer||0)+' for '+monthName(mo)+'; '+fmtH(retHours(rc.id,mo))+' hours logged so far'+(rc.expHours?' of '+rc.expHours+' expected':'')+'.'); return; }
+  var cid=$('tbClient').value, list=cid?unbilledFor(cid,$('tbThru').value):[], h=0, a=0, norate=0;
+  list.forEach(function(e){ h+=e.hours; a+=Math.round(e.hours*e.rate); if(!e.rate) norate++; });
+  $('tbInfo').textContent=!cid?'Choose a client to see what is ready to bill.':(list.length?list.length+' entr'+(list.length===1?'y':'ies')+', '+fmtH(h)+' hours, '+money(a)+(norate?'. '+norate+' entr'+(norate===1?'y has':'ies have')+' no hourly rate; set one first':''):'Nothing unbilled for this client in that period.');
+}
+function renderTime(){
+  fillClients('tmrClient','No client (internal time)'); fillClients('tmClient','No client (internal time)'); fillClients('tmfClient','All clients'); fillClients('tbClient','Choose a client');
+  var td=today(), dow=(new Date(td+'T12:00:00').getDay()+6)%7, wk=addDays(td,-dow), wkEnd=addDays(wk,6), mo=td.slice(0,7), hw=0, hm=0, uh=0, ua=0;
+  data.time.forEach(function(e){ if(e.date>=wk&&e.date<=wkEnd) hw+=e.hours; if(e.date.slice(0,7)===mo) hm+=e.hours; if(tmStatus(e)==='un'){ uh+=e.hours; ua+=Math.round(e.hours*e.rate); } });
+  $('tmTiles').innerHTML=[['This week',fmtH(hw)+' h','Monday to Sunday'],['This month',fmtH(hm)+' h','All clients'],['Unbilled time',fmtH(uh)+' h','Billable and not yet invoiced'],['Unbilled value',money(ua),'Hourly clients, at each entry\'s rate']].concat(data.clients.some(function(c){return c.billing==='retainer';})?[['Retainer hours',fmtH(data.time.reduce(function(s,e){ return s+((e.billable&&isRet(e.clientId)&&e.date.slice(0,7)===mo)?e.hours:0); },0))+' h','This month, retainer clients']]:[]).map(function(t){ return '<div class="tile"><div class="k">'+t[0]+'</div><div class="v">'+t[1]+'</div><div class="s">'+esc(t[2])+'</div></div>'; }).join('');
+  var fc=$('tmfClient').value, fs=$('tmfStatus').value, th=0, ta=0;
+  var rows=data.time.filter(function(e){ if(yearOf(e.date)!==year) return false; if(fc&&e.clientId!==fc) return false; if(fs&&tmStatus(e)!==fs) return false; return true; }).sort(function(a,b){ return a.date<b.date?1:(a.date>b.date?-1:0); });
+  $('tmTable').tBodies[0].innerHTML=rows.length?rows.map(function(e){
+    var st=tmStatus(e), inv=tmInvoice(e), ret=(st==='ret')||!!(inv&&inv.retainerMonth), amt=ret?0:Math.round(e.hours*e.rate); th+=e.hours; if(st!=='nb') ta+=amt;
+    var lab=st==='inv'?'<span class="tag good">'+(ret?'Retainer, ':'Invoiced ')+esc(inv.number)+'</span>':(st==='un'?'<span class="tag warn">Unbilled</span>':(st==='ret'?'<span class="tag">Retainer, not yet invoiced</span>':'<span class="tag">Not billable</span>'));
+    return '<tr><td class="nowrap">'+esc(e.date)+'</td><td>'+esc(tmClientName(e))+'</td><td>'+esc(e.desc)+'</td><td>'+(e.tag?'<span class="tag">'+esc(e.tag)+'</span>':'')+'</td><td class="num">'+fmtH(e.hours)+'</td><td class="num">'+(e.rate&&!ret?money(e.rate):'')+'</td><td class="num">'+(st==='nb'?'':(ret?'<span class="hint">retainer</span>':money(amt)))+'</td><td>'+lab+'</td><td class="acts noprint">'+(st==='inv'&&!ret?'':'<button class="btn small mut" data-tedit="'+esc(e.id)+'">Edit</button> <button class="btn small danger mut" data-tdel="'+esc(e.id)+'">Delete</button>')+'</td></tr>';
+  }).join(''):'<tr><td colspan="9" class="empty">No time entries for '+year+(fc||fs?' match these filters':' yet')+'.</td></tr>';
+  $('tmTable').tFoot.innerHTML=rows.length?'<tr><td colspan="4">'+rows.length+' entr'+(rows.length===1?'y':'ies')+' shown</td><td class="num">'+fmtH(th)+'</td><td></td><td class="num">'+money(ta)+'</td><td colspan="2"></td></tr>':'';
+  var run=!!data.timer; $('tmrStart').hidden=run; $('tmrStop').hidden=!run; $('tmrCancel').hidden=!run; if(!run) $('tmrClock').textContent='0:00:00';
+  $('tmrHint').textContent=run?'Started '+new Date(data.timer.start).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+'. The timer keeps running if you close the note; it is saved with the ledger.':'Stopping rounds to the nearest '+(num(data.settings.timeRound)||6)+' minutes (change this in Settings).';
+  document.querySelector('nav.tabs button[data-tab=time]').textContent=run?'Time (running)':'Time';
+  if(!$('tbThru').value) $('tbThru').value=td;
+  updateBillInfo();
+}
+function renderTimeReport(){
+  var by={}, tot={h:0,b:0,inv:0,un:0};
+  data.time.forEach(function(e){ if(yearOf(e.date)!==year) return; var k=tmClientName(e), o=by[k]||(by[k]={h:0,b:0,inv:0,un:0}), st=tmStatus(e), amt=Math.round(e.hours*e.rate);
+    o.h+=e.hours; tot.h+=e.hours; if(st!=='nb'){ o.b+=e.hours; tot.b+=e.hours; } var ri=tmInvoice(e); if(st==='inv'&&!(ri&&ri.retainerMonth)){ o.inv+=amt; tot.inv+=amt; } else if(st==='un'){ o.un+=amt; tot.un+=amt; } });
+  data.invoices.forEach(function(i){ if(!i.retainerMonth||i.status==='void'||yearOf(i.retainerMonth)!==year) return; var k=invClientName(i), o=by[k]||(by[k]={h:0,b:0,inv:0,un:0}), t=invTotal(i); o.inv+=t; tot.inv+=t; });
+  var ks=Object.keys(by).sort(function(a,b){return by[b].h-by[a].h;});
+  renderRetainers();
+  $('tmRepTable').tBodies[0].innerHTML=ks.length?ks.map(function(k){ var o=by[k]; return '<tr><td>'+esc(k)+'</td><td class="num">'+fmtH(o.h)+'</td><td class="num">'+(tot.h?Math.round(o.h/tot.h*100):0)+'%</td><td class="num">'+fmtH(o.b)+'</td><td class="num">'+money(o.inv)+'</td><td class="num">'+money(o.un)+'</td></tr>'; }).join('')+'<tr><td><strong>Total</strong></td><td class="num"><strong>'+fmtH(tot.h)+'</strong></td><td class="num"></td><td class="num"><strong>'+fmtH(tot.b)+'</strong></td><td class="num"><strong>'+money(tot.inv)+'</strong></td><td class="num"><strong>'+money(tot.un)+'</strong></td></tr>':'<tr><td colspan="6" class="empty">No time recorded for '+year+'.</td></tr>';
+}
+function resetTm(){ $('tmId').value=''; $('tmDate').value=today(); $('tmHours').value=''; $('tmRate').value=''; $('tmDesc').value=''; $('tmTag').value=''; $('tmBill').checked=true; syncRateField(); $('tmSave').textContent='Add time'; $('tmCancel').hidden=true; $('tmErr').textContent=''; $('tmFormTitle').textContent='Add time by hand'; }
+function syncTimer(){ if(data.timer){ if(clientById(data.timer.clientId)) $('tmrClient').value=data.timer.clientId; $('tmrDesc').value=data.timer.desc; $('tmrTag').value=data.timer.tag; } }
+setInterval(function(){ if(!data.timer) return; var s=Math.max(0,Math.floor((Date.now()-data.timer.start)/1000)); $('tmrClock').textContent=Math.floor(s/3600)+':'+pad(Math.floor(s/60)%60)+':'+pad(s%60); },1000);
+$('tmrForm').addEventListener('submit',function(e){
+  e.preventDefault(); if(locked||data.timer) return;
+  data.timer={start:Date.now(), clientId:$('tmrClient').value, desc:$('tmrDesc').value.trim(), tag:$('tmrTag').value.trim()}; commit();
+});
+$('tmrStop').addEventListener('click',function(){
+  if(locked||!data.timer) return;
+  var inc=Math.max(1,Math.round(num(data.settings.timeRound)||6)), mins=(Date.now()-data.timer.start)/60000, r=Math.max(inc,Math.round(mins/inc)*inc), c=clientById($('tmrClient').value);
+  data.time.push({id:uid(), date:localDate(data.timer.start), clientId:c?c.id:'', clientName:c?c.name:'', hours:Math.round(r/60*100)/100, desc:$('tmrDesc').value.trim(), tag:$('tmrTag').value.trim(), rate:(c&&c.billing!=='retainer'&&c.rate)||0, billable:!!c, invoiceId:''});
+  year=yearOf(localDate(data.timer.start)); data.timer=null; $('tmrDesc').value=''; commit();
+});
+$('tmrCancel').addEventListener('click',function(){ if(locked||!data.timer) return; if(!arm(this,'Confirm discard')) return; data.timer=null; commit(); });
+$('tmClient').addEventListener('change',function(){ var c=clientById(this.value); syncRateField(); if(c&&c.billing!=='retainer'&&c.rate&&!$('tmRate').value) $('tmRate').value=(c.rate/100).toFixed(2); });
+$('tmForm').addEventListener('submit',function(e){
+  e.preventDefault(); if(locked) return;
+  var date=$('tmDate').value, h=num($('tmHours').value), c=clientById($('tmClient').value), rv=$('tmRate').value.trim(), rate=(c&&c.billing==='retainer')?0:(rv===''?((c&&c.rate)||0):rateOf(rv)), id=$('tmId').value;
+  if(!isDate(date)){ $('tmErr').textContent='Enter a valid date.'; return; }
+  if(isNaN(h)||h<=0||h>24){ $('tmErr').textContent='Enter hours between 0 and 24, for example 1.5.'; return; }
+  if(rv!==''&&rate===''){ $('tmErr').textContent='Enter the rate as a number, for example 200.'; return; }
+  var old=data.time.find(function(x){return x.id===id;});
+  var en={id:id||uid(), date:date, clientId:c?c.id:'', clientName:c?c.name:'', hours:Math.round(h*100)/100, desc:$('tmDesc').value.trim(), tag:$('tmTag').value.trim(), rate:rate||0, billable:$('tmBill').checked&&!!c, invoiceId:''};
+  if(old) data.time[data.time.indexOf(old)]=en; else data.time.push(en);
+  year=yearOf(date); resetTm(); commit();
+});
+$('tmCancel').addEventListener('click',resetTm);
+$('tmTable').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b||locked) return;
+  if(b.dataset.tedit){ var en=data.time.find(function(x){return x.id===b.dataset.tedit;}); if(!en) return;
+    $('tmId').value=en.id; $('tmDate').value=en.date; $('tmClient').value=clientById(en.clientId)?en.clientId:''; $('tmHours').value=fmtH(en.hours); $('tmRate').value=en.rate?(en.rate/100).toFixed(2):''; $('tmDesc').value=en.desc; $('tmTag').value=en.tag; $('tmBill').checked=en.billable; syncRateField();
+    $('tmSave').textContent='Save changes'; $('tmCancel').hidden=false; $('tmFormTitle').textContent='Edit time entry'; $('tmForm').scrollIntoView(); }
+  else if(b.dataset.tdel){ if(!arm(b,'Confirm delete')) return; data.time=data.time.filter(function(x){return x.id!==b.dataset.tdel;}); if($('tmId').value===b.dataset.tdel) resetTm(); commit(); }
+});
+['tmfClient','tmfStatus'].forEach(function(id){ $(id).addEventListener('change',renderTime); });
+['tbClient','tbThru','tbGroup','tbMonth'].forEach(function(id){ $(id).addEventListener('change',updateBillInfo); });
+$('tbMonth').addEventListener('input',updateBillInfo);
+$('tbForm').addEventListener('submit',function(e){
+  e.preventDefault(); if(locked) return;
+  var c=clientById($('tbClient').value), list=c?unbilledFor(c.id,$('tbThru').value):[], mode=$('tbGroup').value;
+  if(!c){ $('tbErr').textContent='Choose a client.'; return; }
+  if(c.billing==='retainer') return billRetainer(c);
+  if(!list.length){ $('tbErr').textContent='There is no unbilled time for that client in the period.'; return; }
+  if(list.some(function(x){return !x.rate;})){ $('tbErr').textContent='Some entries have no hourly rate. Edit them, or set a rate on the client and re-enter.'; return; }
+  $('tbErr').textContent='';
+  var items=[], groups={}, order=[];
+  list.forEach(function(x){
+    if(mode==='entry'){ items.push({desc:x.date+'  '+(x.desc||'Consulting services'), qty:x.hours, rate:x.rate}); return; }
+    var k=(mode==='project'?x.tag:'')+'|'+x.rate, g=groups[k]; if(!g){ g=groups[k]={tag:mode==='project'?x.tag:'', rate:x.rate, h:0, from:x.date, to:x.date}; order.push(k); }
+    g.h+=x.hours; if(x.date<g.from) g.from=x.date; if(x.date>g.to) g.to=x.date;
+  });
+  order.forEach(function(k){ var g=groups[k]; items.push({desc:(g.tag||'Consulting services')+', '+(g.from===g.to?g.from:g.from+' to '+g.to), qty:Math.round(g.h*100)/100, rate:g.rate}); });
+  var no=str(data.settings.invPrefix)+str(data.settings.invNext), n=parseInt(data.settings.invNext,10), bump=0;
+  while(data.invoices.some(function(i){return i.number===no;})&&bump<1000){ bump++; no=str(data.settings.invPrefix)+((isNaN(n)?0:n)+bump); }
+  if(!isNaN(n)) data.settings.invNext=n+bump+1;
+  var terms=parseInt(c.terms!==''?c.terms:data.settings.invTerms,10), d=today(), tags={}; list.forEach(function(x){ tags[x.tag]=1; });
+  var inv={id:uid(), number:no, date:d, due:addDays(d,isNaN(terms)?0:terms), clientId:c.id, clientName:c.name, tag:Object.keys(tags).length===1?list[0].tag:'', notes:'', status:'draft', paidDate:'', txId:'', items:items};
+  data.invoices.push(inv); list.forEach(function(x){ x.invoiceId=inv.id; });
+  resetInv(); commit(); viewInvoice(inv.id); setStatus('Draft invoice '+no+' created from '+list.length+' time entr'+(list.length===1?'y':'ies')+'. Review it on the Invoices tab.');
+});
+function nextInvNo(){
+  var no=str(data.settings.invPrefix)+str(data.settings.invNext), n=parseInt(data.settings.invNext,10), bump=0;
+  while(data.invoices.some(function(i){return i.number===no;})&&bump<1000){ bump++; no=str(data.settings.invPrefix)+((isNaN(n)?0:n)+bump); }
+  if(!isNaN(n)) data.settings.invNext=n+bump+1; return no;
+}
+function billRetainer(c){
+  var mo=$('tbMonth').value;
+  if(!/^\d{4}-\d{2}$/.test(mo)){ $('tbErr').textContent='Enter the retainer month as YYYY-MM.'; return; }
+  var ex=retInvoiceFor(c.id,mo); if(ex){ $('tbErr').textContent=monthName(mo)+' is already invoiced as '+ex.number+'. Void it first to re-issue.'; return; }
+  if(!c.retainer){ $('tbErr').textContent='Set the monthly retainer amount on the client first.'; return; }
+  $('tbErr').textContent='';
+  var notes='', d=today(), terms=parseInt(c.terms!==''?c.terms:data.settings.invTerms,10);
+  if($('tbShowHours').checked){ var tags={}, h=0; data.time.forEach(function(e){ if(e.clientId===c.id&&e.billable&&e.date.slice(0,7)===mo){ h+=e.hours; var k=e.tag||'General'; tags[k]=(tags[k]||0)+e.hours; } });
+    var parts=Object.keys(tags).sort().map(function(k){ return k+' '+fmtH(tags[k]); });
+    notes='Hours logged for '+monthName(mo)+' as of '+d+': '+fmtH(h)+(parts.length>1?' ('+parts.join(', ')+')':'')+'. Provided for information; the retainer fee is fixed.'; }
+  var inv={id:uid(), number:nextInvNo(), date:d, due:addDays(d,isNaN(terms)?0:terms), clientId:c.id, clientName:c.name, retainerMonth:mo, tag:'', notes:notes, status:'draft', paidDate:'', txId:'', items:[{desc:'Monthly retainer, '+monthName(mo), qty:1, rate:c.retainer}]};
+  data.invoices.push(inv); resetInv(); commit(); viewInvoice(inv.id); setStatus('Draft retainer invoice '+inv.number+' created. Review it on the Invoices tab.');
+}
+function timeCsv(){
+  var q=function(s){ s=String(s==null?'':s); if(/^[=+\-@\t\r]/.test(s)) s="'"+s; return '"'+s.replace(/"/g,'""')+'"'; };
+  var L=['Date,Client,Description,Tag,Hours,Rate,Amount,Status,Invoice'];
+  data.time.filter(function(e){return yearOf(e.date)===year;}).sort(function(a,b){return a.date<b.date?-1:1;}).forEach(function(e){ var st=tmStatus(e), inv=tmInvoice(e);
+    L.push([e.date,q(tmClientName(e)),q(e.desc),q(e.tag),fmtH(e.hours),e.rate?(e.rate/100).toFixed(2):'',(st==='nb'||st==='ret'||(inv&&inv.retainerMonth))?'':(Math.round(e.hours*e.rate)/100).toFixed(2),st==='inv'?(inv.retainerMonth?'Retainer invoiced':'Invoiced'):(st==='un'?'Unbilled':(st==='ret'?'Under retainer':'Not billable')),inv?q(inv.number):''].join(',')); });
+  return L.join('\r\n');
+}
+$('tmCsvDl').addEventListener('click',function(){ download('llc-books-time-'+year+'.csv',timeCsv(),'text/csv'); });
+$('tmCsvShow').addEventListener('click',function(){ var o=$('tmOut'); o.hidden=false; o.value=timeCsv(); o.focus(); o.select(); });
+
 /* ---------- Tabs ---------- */
 Array.prototype.forEach.call(document.querySelectorAll('nav.tabs button'),function(b){
   b.addEventListener('click',function(){
     Array.prototype.forEach.call(document.querySelectorAll('nav.tabs button'),function(x){ x.setAttribute('aria-selected',x===b?'true':'false'); });
-    ['ledger','invoices','reports','mileage','settings'].forEach(function(t){ $('tab-'+t).hidden=(t!==b.dataset.tab); });
+    ['ledger','invoices','time','reports','mileage','settings'].forEach(function(t){ $('tab-'+t).hidden=(t!==b.dataset.tab); });
     render();
   });
 });
